@@ -75,7 +75,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String selectedGrain = "TRIGO";
 
-  // JEU DE DONNÉES COMPLET (Ajout de isFav et order pour la fonction favoris)
   final List<Map<String, dynamic>> grainsData = [
     {"name": "TRIGO", "emoji": "🌾", "price": "515.00", "variation": "+4.09%", "history": [500.0, 505.0, 515.0], "isFav": false, "order": 0},
     {"name": "SOJA", "emoji": "🌱", "price": "420.50", "variation": "-1.20%", "history": [430.0, 425.0, 420.5], "isFav": false, "order": 1},
@@ -90,7 +89,6 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     const Color darkGreen = Color(0xFF1B4D3E);
 
-    // LOGIQUE DE TRI : Favoris en haut, puis ordre initial
     List<Map<String, dynamic>> sortedList = List.from(grainsData);
     sortedList.sort((a, b) {
       if (a["isFav"] != b["isFav"]) return a["isFav"] ? -1 : 1;
@@ -135,14 +133,8 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ],
                 ),
-                Text(
-                  currentData["variation"], 
-                  style: TextStyle(
-                    color: currentData["variation"].contains('+') ? Colors.green : Colors.red, 
-                    fontWeight: FontWeight.bold, 
-                    fontSize: 18
-                  )
-                ),
+                Text(currentData["variation"], 
+                  style: TextStyle(color: currentData["variation"].contains('+') ? Colors.green : Colors.red, fontWeight: FontWeight.bold, fontSize: 18)),
               ],
             ),
           ),
@@ -175,40 +167,40 @@ class _HomePageState extends State<HomePage> {
                           decoration: BoxDecoration(
                             color: isSelected ? darkGreen : Colors.white,
                             borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: isSelected ? darkGreen : Colors.grey.withOpacity(0.2), 
-                              width: 1.5
-                            ),
+                            border: Border.all(color: isSelected ? darkGreen : Colors.grey.withOpacity(0.2), width: 1.5),
                           ),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
                             child: Row(
                               children: [
                                 Text(item["name"], 
-                                  style: TextStyle(
-                                    color: isSelected ? Colors.white : darkGreen, 
-                                    fontWeight: FontWeight.bold, 
-                                    fontSize: 22
-                                  )
-                                ),
+                                  style: TextStyle(color: isSelected ? Colors.white : darkGreen, fontWeight: FontWeight.bold, fontSize: 22)),
                                 const SizedBox(width: 10),
                                 Text(item["emoji"], style: const TextStyle(fontSize: 24)),
+                                
                                 const Spacer(),
+                                
                                 if (isSelected) ...[
+                                  // MENU D'ACTIONS (Élément sélectionné)
                                   GestureDetector(
                                     onTap: () {
                                       setState(() {
-                                        // Mise à jour de l'état favori dans la liste source
                                         int originalIdx = grainsData.indexWhere((g) => g["name"] == item["name"]);
                                         grainsData[originalIdx]["isFav"] = !grainsData[originalIdx]["isFav"];
                                       });
                                     },
-                                    child: _whiteIconButton(isFav ? Icons.star : Icons.star_border, isFav ? Colors.orange : darkGreen),
+                                    child: _whiteIconButton(
+                                      isFav ? Icons.star : Icons.star_border, 
+                                      isFav ? Colors.orange : darkGreen
+                                    ),
                                   ),
                                   const SizedBox(width: 10),
                                   _whiteIconButton(Icons.alarm, darkGreen),
                                   const SizedBox(width: 10),
                                   _whiteIconButton(Icons.bar_chart, darkGreen),
+                                ] else if (isFav) ...[
+                                  // BADGE ÉTOILE À DROITE (Élément favori non sélectionné)
+                                  const Icon(Icons.star, color: Colors.orange, size: 28),
                                 ]
                               ],
                             ),
