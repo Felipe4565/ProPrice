@@ -10,7 +10,7 @@ class PropriceApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        useMaterial3: true, // Standard de design Flutter moderne
+        useMaterial3: true,
         scaffoldBackgroundColor: const Color(0xFFF2EFE9),
         scrollbarTheme: ScrollbarThemeData(
           thumbColor: WidgetStateProperty.all(const Color(0xFF1B4D3E).withOpacity(0.5)),
@@ -64,7 +64,7 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
-// --- 2. HOME PAGE (INTERACTIVE AVEC DONNÉES) ---
+// --- 2. HOME PAGE ---
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -73,73 +73,36 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // Élément sélectionné par défaut
   String selectedGrain = "TRIGO";
 
-  // JEU DE DONNÉES COMPLET
+  // JEU DE DONNÉES COMPLET (Ajout de isFav et order pour la fonction favoris)
   final List<Map<String, dynamic>> grainsData = [
-    {
-      "name": "TRIGO",
-      "emoji": "🌾",
-      "price": "515.00",
-      "variation": "+4.09%",
-      "history": [500.0, 505.0, 515.0]
-    },
-    {
-      "name": "SOJA",
-      "emoji": "🌱",
-      "price": "420.50",
-      "variation": "-1.20%",
-      "history": [430.0, 425.0, 420.5]
-    },
-    {
-      "name": "MAIZ",
-      "emoji": "🌽",
-      "price": "185.00",
-      "variation": "+0.50%",
-      "history": [180.0, 182.0, 185.0]
-    },
-    {
-      "name": "CANOLA",
-      "emoji": "🌿",
-      "price": "610.00",
-      "variation": "+2.15%",
-      "history": [590.0, 600.0, 610.0]
-    },
-    {
-      "name": "GIRASOL",
-      "emoji": "🌻",
-      "price": "390.00",
-      "variation": "-0.75%",
-      "history": [400.0, 395.0, 390.0]
-    },
-    {
-      "name": "CEBADA",
-      "emoji": "🪴",
-      "price": "210.00",
-      "variation": "+1.10%",
-      "history": [205.0, 208.0, 210.0]
-    },
-    {
-      "name": "ARROZ",
-      "emoji": "🍚",
-      "price": "12.40",
-      "variation": "+0.25%",
-      "history": [12.10, 12.30, 12.40]
-    },
+    {"name": "TRIGO", "emoji": "🌾", "price": "515.00", "variation": "+4.09%", "history": [500.0, 505.0, 515.0], "isFav": false, "order": 0},
+    {"name": "SOJA", "emoji": "🌱", "price": "420.50", "variation": "-1.20%", "history": [430.0, 425.0, 420.5], "isFav": false, "order": 1},
+    {"name": "MAIZ", "emoji": "🌽", "price": "185.00", "variation": "+0.50%", "history": [180.0, 182.0, 185.0], "isFav": false, "order": 2},
+    {"name": "CANOLA", "emoji": "🌿", "price": "610.00", "variation": "+2.15%", "history": [590.0, 600.0, 610.0], "isFav": false, "order": 3},
+    {"name": "GIRASOL", "emoji": "🌻", "price": "390.00", "variation": "-0.75%", "history": [400.0, 395.0, 390.0], "isFav": false, "order": 4},
+    {"name": "CEBADA", "emoji": "🪴", "price": "210.00", "variation": "+1.10%", "history": [205.0, 208.0, 210.0], "isFav": false, "order": 5},
+    {"name": "ARROZ", "emoji": "🍚", "price": "12.40", "variation": "+0.25%", "history": [12.10, 12.30, 12.40], "isFav": false, "order": 6},
   ];
 
   @override
   Widget build(BuildContext context) {
     const Color darkGreen = Color(0xFF1B4D3E);
 
-    // Récupération des données de l'élément sélectionné
+    // LOGIQUE DE TRI : Favoris en haut, puis ordre initial
+    List<Map<String, dynamic>> sortedList = List.from(grainsData);
+    sortedList.sort((a, b) {
+      if (a["isFav"] != b["isFav"]) return a["isFav"] ? -1 : 1;
+      return a["order"].compareTo(b["order"]);
+    });
+
     final currentData = grainsData.firstWhere((g) => g["name"] == selectedGrain);
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF2EFE9), // Assorti au fond
-        surfaceTintColor: Colors.transparent,     // FIX : Empêche l'AppBar de devenir grise au scroll
+        backgroundColor: const Color(0xFFF2EFE9),
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         title: const Text('PROPRICE', style: TextStyle(color: darkGreen, fontWeight: FontWeight.bold)),
         actions: [IconButton(icon: const Icon(Icons.menu, color: darkGreen, size: 35), onPressed: () {})],
@@ -148,7 +111,6 @@ class _HomePageState extends State<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 10),
-          // EN-TÊTE DYNAMIQUE
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 25),
             child: Column(
@@ -163,9 +125,7 @@ class _HomePageState extends State<HomePage> {
                       style: const TextStyle(color: darkGreen, fontSize: 50, fontWeight: FontWeight.bold)),
                     const SizedBox(width: 15),
                     ElevatedButton(
-                      onPressed: () {
-                        print("Graphique de : ${currentData["name"]}");
-                      },
+                      onPressed: () => print("Graphique de : ${currentData["name"]}"),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: darkGreen, 
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -188,7 +148,6 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 20),
 
-          // RECTANGLE BLANC ET LISTE D'ÉLÉMENTS
           Expanded(
             child: Container(
               margin: const EdgeInsets.fromLTRB(20, 0, 20, 15),
@@ -203,17 +162,14 @@ class _HomePageState extends State<HomePage> {
                   thumbVisibility: true,
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 20),
-                    itemCount: grainsData.length,
+                    itemCount: sortedList.length,
                     itemBuilder: (context, index) {
-                      final item = grainsData[index];
+                      final item = sortedList[index];
                       final isSelected = selectedGrain == item["name"];
+                      final isFav = item["isFav"];
 
                       return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            selectedGrain = item["name"];
-                          });
-                        },
+                        onTap: () => setState(() => selectedGrain = item["name"]),
                         child: Container(
                           margin: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
@@ -225,7 +181,7 @@ class _HomePageState extends State<HomePage> {
                             ),
                           ),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25), // Tailles des rectangles
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
                             child: Row(
                               children: [
                                 Text(item["name"], 
@@ -239,7 +195,16 @@ class _HomePageState extends State<HomePage> {
                                 Text(item["emoji"], style: const TextStyle(fontSize: 24)),
                                 const Spacer(),
                                 if (isSelected) ...[
-                                  _whiteIconButton(Icons.star, darkGreen),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        // Mise à jour de l'état favori dans la liste source
+                                        int originalIdx = grainsData.indexWhere((g) => g["name"] == item["name"]);
+                                        grainsData[originalIdx]["isFav"] = !grainsData[originalIdx]["isFav"];
+                                      });
+                                    },
+                                    child: _whiteIconButton(isFav ? Icons.star : Icons.star_border, isFav ? Colors.orange : darkGreen),
+                                  ),
                                   const SizedBox(width: 10),
                                   _whiteIconButton(Icons.alarm, darkGreen),
                                   const SizedBox(width: 10),
