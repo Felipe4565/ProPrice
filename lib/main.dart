@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Import indispensable pour les vibrations
 import 'dart:async';
+import 'dart:math';
 
 void main() => runApp(const PropriceApp());
 
@@ -22,6 +24,73 @@ class PropriceApp extends StatelessWidget {
       home: const SplashScreen(),
     );
   }
+}
+
+// --- COMPOSANT GRAPHIQUE ---
+class RealMiniChart extends StatelessWidget {
+  final String variation;
+  final Color color;
+  final double price;
+
+  const RealMiniChart({super.key, required this.variation, required this.color, required this.price});
+
+  @override
+  Widget build(BuildContext context) {
+    bool isPositive = variation.contains('+');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        SizedBox(
+          height: 35,
+          width: 90,
+          child: CustomPaint(
+            painter: _ChartPainter(color: color, isPositive: isPositive, seed: price.toInt()),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text("LAST 24H", style: TextStyle(color: color.withOpacity(0.6), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+      ],
+    );
+  }
+}
+
+class _ChartPainter extends CustomPainter {
+  final Color color;
+  final bool isPositive;
+  final int seed;
+  _ChartPainter({required this.color, required this.isPositive, required this.seed});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2.2..strokeCap = StrokeCap.round;
+    final dashPaint = Paint()..color = color.withOpacity(0.15)..style = PaintingStyle.stroke..strokeWidth = 1;
+    
+    for (double i = 0; i < size.width; i += 5) {
+      canvas.drawLine(Offset(i, size.height / 2), Offset(i + 2, size.height / 2), dashPaint);
+    }
+
+    final path = Path();
+    final rand = Random(seed);
+    int segments = 6;
+    double step = size.width / segments;
+    List<Offset> pts = [];
+    
+    for (int i = 0; i <= segments; i++) {
+      double x = i * step;
+      double noise = rand.nextDouble() * 12;
+      double trend = isPositive 
+          ? (size.height * 0.75) - (i * 4) 
+          : (size.height * 0.25) + (i * 4);
+      pts.add(Offset(x, (trend + noise).clamp(2, size.height - 2)));
+    }
+
+    path.moveTo(pts[0].dx, pts[0].dy);
+    for (int i = 0; i < pts.length - 1; i++) {
+      path.quadraticBezierTo(pts[i].dx + (pts[i+1].dx - pts[i].dx) / 2, pts[i].dy, pts[i+1].dx, pts[i+1].dy);
+    }
+    canvas.drawPath(path, paint);
+  }
+  @override bool shouldRepaint(CustomPainter old) => true;
 }
 
 // --- 1. SPLASH SCREEN ---
@@ -50,14 +119,11 @@ class _SplashScreenState extends State<SplashScreen> {
           children: [
             const Spacer(flex: 3),
             Container(
-              width: 160,
-              height: 160,
+              width: 160, height: 160,
               decoration: BoxDecoration(
                 color: darkGreen,
                 borderRadius: BorderRadius.circular(45),
-                boxShadow: [
-                  BoxShadow(color: darkGreen.withOpacity(0.3), blurRadius: 40, offset: const Offset(0, 20))
-                ],
+                boxShadow: [BoxShadow(color: darkGreen.withOpacity(0.3), blurRadius: 40, offset: const Offset(0, 20))],
               ),
               child: const Icon(Icons.show_chart_rounded, color: Colors.white, size: 90),
             ),
@@ -95,11 +161,12 @@ class _HomePageState extends State<HomePage> {
     {"name": "ARROZ", "emoji": "🍚", "price": "12.40", "variation": "+0.25%", "isFav": false, "order": 6},
   ];
 
+  // LOGIQUE FAVORIS AVEC VIBRATION
   void _toggleFavorite(Map<String, dynamic> item) {
+    HapticFeedback.lightImpact(); // Vibration "click" légère
     setState(() {
       int idx = grainsData.indexWhere((g) => g["name"] == item["name"]);
       grainsData[idx]["isFav"] = !grainsData[idx]["isFav"];
-      
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -111,6 +178,14 @@ class _HomePageState extends State<HomePage> {
         ),
       );
     });
+  }
+
+  // LOGIQUE SELECTION AVEC VIBRATION
+  void _onSelectGrain(String name) {
+    if (selectedGrain != name) {
+      HapticFeedback.selectionClick(); // Vibration subtile de sélection
+      setState(() => selectedGrain = name);
+    }
   }
 
   @override
@@ -156,39 +231,40 @@ class _HomePageState extends State<HomePage> {
                     Text(" / Tn", style: TextStyle(color: darkGreen.withOpacity(0.5), fontSize: 18, fontWeight: FontWeight.bold)),
                     const Spacer(),
                     Container(
-                      decoration: BoxDecoration(
-                        boxShadow: [BoxShadow(color: darkGreen.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 8))]
-                      ),
+                      decoration: BoxDecoration(boxShadow: [BoxShadow(color: darkGreen.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 8))]),
                       child: ElevatedButton(
                         onPressed: () {},
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: darkGreen, 
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                          backgroundColor: darkGreen, foregroundColor: Colors.white,
+                          elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                         ),
-                        child: const Text("VER GRAFICO", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        child: const Text("VER GRAFICO", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 15),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: trendColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: trendColor.withOpacity(0.2), width: 1),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(isPositive ? Icons.trending_up_rounded : Icons.trending_down_rounded, color: trendColor, size: 22),
-                      const SizedBox(width: 8),
-                      Text(currentData["variation"], style: TextStyle(color: trendColor, fontWeight: FontWeight.w900, fontSize: 18)),
-                    ],
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: trendColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: trendColor.withOpacity(0.2), width: 1),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(isPositive ? Icons.trending_up_rounded : Icons.trending_down_rounded, color: trendColor, size: 22),
+                          const SizedBox(width: 8),
+                          Text(currentData["variation"], style: TextStyle(color: trendColor, fontWeight: FontWeight.w900, fontSize: 18)),
+                        ],
+                      ),
+                    ),
+                    RealMiniChart(variation: currentData["variation"], color: trendColor, price: double.tryParse(currentData["price"]) ?? 0),
+                  ],
                 ),
               ],
             ),
@@ -198,8 +274,7 @@ class _HomePageState extends State<HomePage> {
             child: Container(
               margin: const EdgeInsets.fromLTRB(20, 0, 20, 15),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
+                color: Colors.white, borderRadius: BorderRadius.circular(30),
                 boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 30, offset: const Offset(0, 10))],
               ),
               child: ClipRRect(
@@ -211,7 +286,6 @@ class _HomePageState extends State<HomePage> {
                     final item = sortedList[index];
                     final isSelected = selectedGrain == item["name"];
                     final isFav = item["isFav"];
-
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -220,7 +294,7 @@ class _HomePageState extends State<HomePage> {
                         borderRadius: BorderRadius.circular(20),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(20),
-                          onTap: () => setState(() => selectedGrain = item["name"]),
+                          onTap: () => _onSelectGrain(item["name"]),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                             decoration: BoxDecoration(
@@ -234,21 +308,28 @@ class _HomePageState extends State<HomePage> {
                               children: [
                                 Text(item["emoji"], style: const TextStyle(fontSize: 24)),
                                 const SizedBox(width: 14),
-                                Text(item["name"], 
-                                  style: TextStyle(color: isSelected ? Colors.white : darkGreen, fontWeight: FontWeight.w800, fontSize: 18)),
+                                Text(item["name"], style: TextStyle(color: isSelected ? Colors.white : darkGreen, fontWeight: FontWeight.w800, fontSize: 18)),
                                 const Spacer(),
                                 if (isSelected) ...[
-                                  _whiteIconButton(
-                                    isFav ? Icons.star_rounded : Icons.star_outline_rounded, 
-                                    isFav ? Colors.orange : darkGreen,
-                                    () => _toggleFavorite(item)
-                                  ),
+                                  // Étoile sur élément sélectionné
+                                  _whiteIconButton(isFav ? Icons.star_rounded : Icons.star_outline_rounded, isFav ? Colors.orange : darkGreen, () => _toggleFavorite(item)),
                                   const SizedBox(width: 8),
                                   _whiteIconButton(Icons.notifications_active_outlined, darkGreen, () {}),
                                   const SizedBox(width: 8),
                                   _whiteIconButton(Icons.bar_chart_rounded, darkGreen, () {}),
-                                ] else if (isFav) ...[
-                                  Icon(Icons.star_rounded, color: Colors.orange.withOpacity(0.8), size: 28),
+                                ] else ...[
+                                  // Étoile cliquable sur élément NON sélectionné
+                                  GestureDetector(
+                                    onTap: () => _toggleFavorite(item),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4.0),
+                                      child: Icon(
+                                        isFav ? Icons.star_rounded : Icons.star_outline_rounded, 
+                                        color: isFav ? Colors.orange.withOpacity(0.8) : darkGreen.withOpacity(0.2), 
+                                        size: 28
+                                      ),
+                                    ),
+                                  ),
                                 ]
                               ],
                             ),
@@ -264,9 +345,7 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)]
-        ),
+        decoration: BoxDecoration(boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)]),
         child: BottomNavigationBar(
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,
@@ -290,8 +369,7 @@ class _HomePageState extends State<HomePage> {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.white, 
-          borderRadius: BorderRadius.circular(12),
+          color: Colors.white, borderRadius: BorderRadius.circular(12),
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4)]
         ),
         child: Icon(icon, color: iconColor, size: 22),
