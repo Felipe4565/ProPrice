@@ -67,7 +67,6 @@ class _SplashScreenState extends State<SplashScreen> {
 // --- 2. HOME PAGE ---
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
-
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -84,6 +83,26 @@ class _HomePageState extends State<HomePage> {
     {"name": "CEBADA", "emoji": "🪴", "price": "210.00", "variation": "+1.10%", "history": [205.0, 208.0, 210.0], "isFav": false, "order": 5},
     {"name": "ARROZ", "emoji": "🍚", "price": "12.40", "variation": "+0.25%", "history": [12.10, 12.30, 12.40], "isFav": false, "order": 6},
   ];
+
+  // LOGIQUE FAVORIS + MESSAGE
+  void _toggleFavorite(Map<String, dynamic> item) {
+    setState(() {
+      int idx = grainsData.indexWhere((g) => g["name"] == item["name"]);
+      grainsData[idx]["isFav"] = !grainsData[idx]["isFav"];
+      
+      final bool isNowFav = grainsData[idx]["isFav"];
+      
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isNowFav ? "${item['name']} Añadido a favoritos" : "${item['name']} eliminado de favoritos"),
+          duration: const Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF1B4D3E),
+        ),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -123,7 +142,7 @@ class _HomePageState extends State<HomePage> {
                       style: const TextStyle(color: darkGreen, fontSize: 50, fontWeight: FontWeight.bold)),
                     const SizedBox(width: 15),
                     ElevatedButton(
-                      onPressed: () => print("Graphique de : ${currentData["name"]}"),
+                      onPressed: () {},
                       style: ElevatedButton.styleFrom(
                         backgroundColor: darkGreen, 
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -139,7 +158,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 20),
-
           Expanded(
             child: Container(
               margin: const EdgeInsets.fromLTRB(20, 0, 20, 15),
@@ -181,14 +199,8 @@ class _HomePageState extends State<HomePage> {
                                 const Spacer(),
                                 
                                 if (isSelected) ...[
-                                  // MENU D'ACTIONS (Élément sélectionné)
                                   GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        int originalIdx = grainsData.indexWhere((g) => g["name"] == item["name"]);
-                                        grainsData[originalIdx]["isFav"] = !grainsData[originalIdx]["isFav"];
-                                      });
-                                    },
+                                    onTap: () => _toggleFavorite(item),
                                     child: _whiteIconButton(
                                       isFav ? Icons.star : Icons.star_border, 
                                       isFav ? Colors.orange : darkGreen
@@ -199,8 +211,10 @@ class _HomePageState extends State<HomePage> {
                                   const SizedBox(width: 10),
                                   _whiteIconButton(Icons.bar_chart, darkGreen),
                                 ] else if (isFav) ...[
-                                  // BADGE ÉTOILE À DROITE (Élément favori non sélectionné)
-                                  const Icon(Icons.star, color: Colors.orange, size: 28),
+                                  GestureDetector(
+                                    onTap: () => _toggleFavorite(item),
+                                    child: const Icon(Icons.star, color: Colors.orange, size: 32),
+                                  ),
                                 ]
                               ],
                             ),
