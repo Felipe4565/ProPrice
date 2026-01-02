@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Import indispensable pour les vibrations
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Réajouté pour la sauvegarde
 import 'dart:async';
 import 'dart:math';
 
-void main() => runApp(const PropriceApp());
+void main() async {
+  // INDISPENSABLE : Initialise le moteur avant de charger les préférences
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const PropriceApp());
+}
 
 class PropriceApp extends StatelessWidget {
   const PropriceApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -26,7 +32,7 @@ class PropriceApp extends StatelessWidget {
   }
 }
 
-// --- COMPOSANT GRAPHIQUE ---
+// --- COMPOSANT GRAPHIQUE (Ton design validé) ---
 class RealMiniChart extends StatelessWidget {
   final String variation;
   final Color color;
@@ -65,11 +71,13 @@ class _ChartPainter extends CustomPainter {
     final paint = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2.2..strokeCap = StrokeCap.round;
     final dashPaint = Paint()..color = color.withOpacity(0.15)..style = PaintingStyle.stroke..strokeWidth = 1;
     
+    // Ligne pointillée centrale
     for (double i = 0; i < size.width; i += 5) {
       canvas.drawLine(Offset(i, size.height / 2), Offset(i + 2, size.height / 2), dashPaint);
     }
 
     final path = Path();
+    // Le "Seed" garantit que le dessin reste le même pour un prix donné
     final rand = Random(seed);
     int segments = 6;
     double step = size.width / segments;
@@ -79,12 +87,13 @@ class _ChartPainter extends CustomPainter {
       double x = i * step;
       double noise = rand.nextDouble() * 12;
       double trend = isPositive 
-          ? (size.height * 0.75) - (i * 4) 
-          : (size.height * 0.25) + (i * 4);
+          ? (size.height * 0.75) - (i * 4) // Monte
+          : (size.height * 0.25) + (i * 4); // Descend
       pts.add(Offset(x, (trend + noise).clamp(2, size.height - 2)));
     }
 
     path.moveTo(pts[0].dx, pts[0].dy);
+    // Courbe de Bézier pour l'effet fluide
     for (int i = 0; i < pts.length - 1; i++) {
       path.quadraticBezierTo(pts[i].dx + (pts[i+1].dx - pts[i].dx) / 2, pts[i].dy, pts[i+1].dx, pts[i+1].dy);
     }
@@ -105,7 +114,9 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     Timer(const Duration(seconds: 2), () {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
+      if (mounted) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
+      }
     });
   }
 
@@ -150,6 +161,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   String selectedGrain = "TRIGO";
+  bool _isLoading = true; // Pour attendre le chargement des favoris
 
   final List<Map<String, dynamic>> grainsData = [
     {"name": "TRIGO", "emoji": "🌾", "price": "515.00", "variation": "+4.09%", "isFav": false, "order": 0},
@@ -161,12 +173,44 @@ class _HomePageState extends State<HomePage> {
     {"name": "ARROZ", "emoji": "🍚", "price": "12.40", "variation": "+0.25%", "isFav": false, "order": 6},
   ];
 
-  // LOGIQUE FAVORIS AVEC VIBRATION
+  @override
+  void initState() {
+    super.initState();
+    _loadFavorites();
+  }
+
+  // --- LOGIQUE DE SAUVEGARDE (AJOUTÉE) ---
+  Future<void> _loadFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    final List<String> savedFavs = prefs.getStringList('favorites') ?? [];
+    
+    setState(() {
+      for (var grain in grainsData) {
+        if (savedFavs.contains(grain['name'])) {
+          grain['isFav'] = true;
+        }
+      }
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _saveFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    final List<String> favList = grainsData
+        .where((g) => g['isFav'] == true)
+        .map((g) => g['name'] as String)
+        .toList();
+    await prefs.setStringList('favorites', favList);
+  }
+
   void _toggleFavorite(Map<String, dynamic> item) {
-    HapticFeedback.lightImpact(); // Vibration "click" légère
+    HapticFeedback.lightImpact();
     setState(() {
       int idx = grainsData.indexWhere((g) => g["name"] == item["name"]);
       grainsData[idx]["isFav"] = !grainsData[idx]["isFav"];
+      
+      _saveFavorites(); // Sauvegarde immédiate
+
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -180,18 +224,20 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  // LOGIQUE SELECTION AVEC VIBRATION
   void _onSelectGrain(String name) {
     if (selectedGrain != name) {
-      HapticFeedback.selectionClick(); // Vibration subtile de sélection
+      HapticFeedback.selectionClick();
       setState(() => selectedGrain = name);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+
     const Color darkGreen = Color(0xFF1B4D3E);
 
+    // Tri dynamique : Favoris en haut
     List<Map<String, dynamic>> sortedList = List.from(grainsData);
     sortedList.sort((a, b) {
       if (a["isFav"] != b["isFav"]) return a["isFav"] ? -1 : 1;
@@ -199,7 +245,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     final currentData = grainsData.firstWhere((g) => g["name"] == selectedGrain);
-    final bool isPositive = currentData["variation"].contains('+');
+    final bool isPositive = (currentData["variation"] as String).contains('+');
     final Color trendColor = isPositive ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
 
     return Scaffold(
@@ -311,14 +357,12 @@ class _HomePageState extends State<HomePage> {
                                 Text(item["name"], style: TextStyle(color: isSelected ? Colors.white : darkGreen, fontWeight: FontWeight.w800, fontSize: 18)),
                                 const Spacer(),
                                 if (isSelected) ...[
-                                  // Étoile sur élément sélectionné
                                   _whiteIconButton(isFav ? Icons.star_rounded : Icons.star_outline_rounded, isFav ? Colors.orange : darkGreen, () => _toggleFavorite(item)),
                                   const SizedBox(width: 8),
                                   _whiteIconButton(Icons.notifications_active_outlined, darkGreen, () {}),
                                   const SizedBox(width: 8),
                                   _whiteIconButton(Icons.bar_chart_rounded, darkGreen, () {}),
                                 ] else ...[
-                                  // Étoile cliquable sur élément NON sélectionné
                                   GestureDetector(
                                     onTap: () => _toggleFavorite(item),
                                     child: Padding(
