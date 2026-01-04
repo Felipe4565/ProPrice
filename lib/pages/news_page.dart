@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shimmer/shimmer.dart'; // Pour l'effet de chargement pro
-import 'package:url_launcher/url_launcher.dart'; // Pour ouvrir l'article
-import 'package:intl/intl.dart'; // Pour les dates
+import 'package:shimmer/shimmer.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
 
 class NewsPage extends StatefulWidget {
   const NewsPage({super.key});
@@ -19,7 +18,7 @@ class _NewsPageState extends State<NewsPage> {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
 
-  final String _apiKey = "ebfe0c0a67ca4acab293895eca1c5410"; // <--- METS TA CLÉ ICI
+  final String _apiKey = "ebfe0c0a67ca4acab293895eca1c5410"; 
 
   @override
   void initState() {
@@ -30,23 +29,50 @@ class _NewsPageState extends State<NewsPage> {
   Future<void> _fetchNews({String? searchQuery}) async {
     setState(() => _isLoading = true);
 
-    String query = searchQuery ?? "agricultura";
-    if (searchQuery == null) {
-      if (_selectedFilter == "TRIGO") query = "trigo OR wheat";
-      else if (_selectedFilter == "SOJA") query = "soja OR soybean";
-      else if (_selectedFilter == "CLIMA") query = "clima agricultura";
-      else if (_selectedFilter == "TECH") query = "agrotech";
-      else if (_selectedFilter == "MERCADO") query = "mercado granos";
+    // Ciblage géographique et thématique strict
+    String regionQuery = "(Uruguay OR Argentina OR CBOT OR Chicago)";
+    String mandatoryTerms = "(precio OR mercado OR exportacion OR granos OR zafra)";
+    String query = "";
+
+    if (searchQuery != null && searchQuery.isNotEmpty) {
+      query = "$mandatoryTerms AND ($searchQuery)";
+    } else {
+      switch (_selectedFilter) {
+        case "TRIGO":
+          query = "trigo AND $mandatoryTerms AND $regionQuery";
+          break;
+        case "SOJA":
+          query = "soja AND $mandatoryTerms AND $regionQuery";
+          break;
+        case "CLIMA":
+          query = "(sequia OR lluvias OR clima) AND (agricultura OR campo) AND Uruguay";
+          break;
+        case "TECH":
+          query = "(agrotech OR precision OR maquinaria) AND agricultura";
+          break;
+        case "MERCADO":
+          query = "(dolar OR bolsa OR commodities) AND $mandatoryTerms AND $regionQuery";
+          break;
+        default:
+          query = "agricultura AND $mandatoryTerms AND $regionQuery";
+      }
     }
 
-    final url = 'https://newsapi.org/v2/everything?q=$query&language=es&sortBy=publishedAt&apiKey=$_apiKey';
+    // On utilise 'relevancy' pour avoir les news les plus "Agro" et non les plus "récentes inutiles"
+    final url = 'https://newsapi.org/v2/everything?q=$query&language=es&sortBy=relevancy&pageSize=30&apiKey=$_apiKey';
 
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        List<dynamic> rawArticles = data['articles'];
+
         setState(() {
-          _articles = data['articles'];
+          _articles = rawArticles.where((a) => 
+            a['urlToImage'] != null && 
+            a['title'] != null &&
+            !a['title'].toString().contains("REMOVED")
+          ).toList();
           _isLoading = false;
         });
       }
@@ -55,75 +81,84 @@ class _NewsPageState extends State<NewsPage> {
     }
   }
 
-  // Fonction pour ouvrir le lien de l'article
   Future<void> _launchURL(String url) async {
     final Uri uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      throw 'Could not launch $url';
-    }
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
   }
 
   @override
   Widget build(BuildContext context) {
     const Color darkGreen = Color(0xFF1B4D3E);
 
-    return Column(
-      children: [
-        _buildHeader(darkGreen),
-        if (!_isSearching) _buildFilterBar(darkGreen),
-        Expanded(
-          child: _isLoading ? _buildShimmerEffect() : _buildList(darkGreen),
-        ),
-      ],
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA), // Fond gris très clair "App Pro"
+      body: Column(
+        children: [
+          _buildHeader(darkGreen),
+          _buildFilterBar(darkGreen),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => _fetchNews(),
+              color: darkGreen,
+              child: _isLoading ? _buildShimmerEffect() : _buildList(darkGreen),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  // --- BARRE DE RECHERCHE & TITRE ---
   Widget _buildHeader(Color darkGreen) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 50, 20, 10),
+      color: Colors.white,
       child: Row(
         children: [
           if (!_isSearching)
-            const Text("NOTICIAS", style: TextStyle(color: Color(0xFF1B4D3E), fontWeight: FontWeight.w900, fontSize: 22))
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("MONITOR AGRO", style: TextStyle(color: Color(0xFF1B4D3E), fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: -0.5)),
+                Text("Precios y Mercados", style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 10)),
+              ],
+            )
           else
             Expanded(
-              child: TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: "Buscar noticias...",
-                  border: InputBorder.none,
-                  hintStyle: TextStyle(color: darkGreen.withOpacity(0.4)),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 15),
+                decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  style: const TextStyle(fontSize: 14),
+                  decoration: const InputDecoration(hintText: "Buscar mercado, puerto...", border: InputBorder.none),
+                  onSubmitted: (val) => _fetchNews(searchQuery: val),
                 ),
-                onSubmitted: (val) {
-                  if (val.isNotEmpty) _fetchNews(searchQuery: val);
-                },
               ),
             ),
-          const Spacer(),
-          IconButton(
-            icon: Icon(_isSearching ? Icons.close : Icons.search, color: darkGreen),
-            onPressed: () {
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: () {
               setState(() {
                 _isSearching = !_isSearching;
-                if (!_isSearching) {
-                  _searchController.clear();
-                  _fetchNews();
-                }
+                if (!_isSearching) { _searchController.clear(); _fetchNews(); }
               });
             },
+            child: CircleAvatar(
+              backgroundColor: darkGreen.withOpacity(0.1),
+              child: Icon(_isSearching ? Icons.close : Icons.search, color: darkGreen, size: 20),
+            ),
           )
         ],
       ),
     );
   }
 
-  // --- FILTRES ---
   Widget _buildFilterBar(Color darkGreen) {
-    final filters = ["TODOS", "TRIGO", "SOJA", "CLIMA", "TECH", "MERCADO"];
-    return SizedBox(
-      height: 45,
+    final filters = ["TODOS", "MERCADO", "SOJA", "TRIGO", "CLIMA", "TECH"];
+    return Container(
+      height: 55,
+      color: Colors.white,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 15),
@@ -131,23 +166,24 @@ class _NewsPageState extends State<NewsPage> {
         itemBuilder: (context, index) {
           final filter = filters[index];
           final isSelected = _selectedFilter == filter;
-          return GestureDetector(
-            onTap: () {
-              setState(() => _selectedFilter = filter);
-              _fetchNews();
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: BoxDecoration(
-                color: isSelected ? darkGreen : Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: isSelected ? [BoxShadow(color: darkGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))] : [],
-                border: Border.all(color: isSelected ? darkGreen : Colors.grey.withOpacity(0.2)),
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+            child: ChoiceChip(
+              label: Text(filter),
+              selected: isSelected,
+              onSelected: (val) {
+                setState(() => _selectedFilter = filter);
+                _fetchNews();
+              },
+              selectedColor: darkGreen,
+              backgroundColor: Colors.grey[50],
+              labelStyle: TextStyle(
+                color: isSelected ? Colors.white : darkGreen,
+                fontSize: 11,
+                fontWeight: FontWeight.bold
               ),
-              alignment: Alignment.center,
-              child: Text(filter, style: TextStyle(color: isSelected ? Colors.white : darkGreen, fontWeight: FontWeight.bold, fontSize: 11)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              side: BorderSide(color: isSelected ? darkGreen : Colors.grey[200]!),
             ),
           );
         },
@@ -155,99 +191,63 @@ class _NewsPageState extends State<NewsPage> {
     );
   }
 
-  // --- LISTE DES ARTICLES ---
   Widget _buildList(Color darkGreen) {
-    return RefreshIndicator(
-      onRefresh: _fetchNews,
-      color: darkGreen,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: _articles.length,
-        itemBuilder: (context, index) {
-          final art = _articles[index];
-          if (index == 0 && !_isSearching) return _buildFeatured(art, darkGreen);
-          return _buildTile(art, darkGreen);
-        },
-      ),
-    );
-  }
-
-  // --- ARTICLE À LA UNE ---
-  Widget _buildFeatured(dynamic art, Color darkGreen) {
-    return GestureDetector(
-      onTap: () => _launchURL(art['url']),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 25),
-        height: 280,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(25),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 15, offset: const Offset(0, 8))],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(25),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.network(art['urlToImage'] ?? "https://via.placeholder.com/400", fit: BoxFit.cover, 
-                errorBuilder: (c,e,s) => Container(color: Colors.grey[300])),
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black.withOpacity(0.9)]),
-                ),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(art['source']['name'].toUpperCase(), style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w900, fontSize: 10)),
-                    const SizedBox(height: 8),
-                    Text(art['title'] ?? "", style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, height: 1.2), maxLines: 3),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --- PETIT ARTICLE ---
-  Widget _buildTile(dynamic art, Color darkGreen) {
-    String timeAgo = "";
-    if (art['publishedAt'] != null) {
-      DateTime date = DateTime.parse(art['publishedAt']);
-      timeAgo = DateFormat('dd/MM HH:mm').format(date);
+    if (_articles.isEmpty) {
+      return const Center(child: Padding(
+        padding: EdgeInsets.all(40),
+        child: Text("No hay noticias específicas para este rubro ahora.", textAlign: TextAlign.center),
+      ));
     }
+    return ListView.builder(
+      padding: const EdgeInsets.all(15),
+      itemCount: _articles.length,
+      itemBuilder: (context, index) {
+        final art = _articles[index];
+        return _buildNewsCard(art, darkGreen);
+      },
+    );
+  }
 
+  Widget _buildNewsCard(dynamic art, Color darkGreen) {
     return GestureDetector(
       onTap: () => _launchURL(art['url']),
       child: Container(
         margin: const EdgeInsets.only(bottom: 15),
-        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.grey.withOpacity(0.1)),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(art['urlToImage'] ?? "https://via.placeholder.com/100", width: 85, height: 85, fit: BoxFit.cover,
-                errorBuilder: (c,e,s) => Container(width: 85, height: 85, color: Colors.grey[200])),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: Image.network(
+                art['urlToImage'], 
+                height: 160, width: double.infinity, fit: BoxFit.cover,
+                errorBuilder: (c,e,s) => Container(height: 160, color: Colors.grey[100]),
+              ),
             ),
-            const SizedBox(width: 15),
-            Expanded(
+            Padding(
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(art['source']['name'] ?? "", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 10)),
-                  const SizedBox(height: 4),
-                  Text(art['title'] ?? "", maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: darkGreen, fontWeight: FontWeight.bold, fontSize: 14, height: 1.2)),
+                  Row(
+                    children: [
+                      Text(art['source']['name'].toString().toUpperCase(), style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w900, fontSize: 9)),
+                      const Spacer(),
+                      Text(DateFormat('dd MMM').format(DateTime.parse(art['publishedAt'])), style: TextStyle(color: Colors.grey[400], fontSize: 10)),
+                    ],
+                  ),
                   const SizedBox(height: 8),
-                  Text(timeAgo, style: TextStyle(color: Colors.grey.withOpacity(0.6), fontSize: 10)),
+                  Text(
+                    art['title'] ?? "", 
+                    style: TextStyle(color: darkGreen, fontWeight: FontWeight.bold, fontSize: 14, height: 1.2),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
@@ -257,18 +257,17 @@ class _NewsPageState extends State<NewsPage> {
     );
   }
 
-  // --- EFFET DE CHARGEMENT SHIMMER ---
   Widget _buildShimmerEffect() {
     return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: 5,
+      padding: const EdgeInsets.all(15),
+      itemCount: 3,
       itemBuilder: (context, index) => Shimmer.fromColors(
-        baseColor: Colors.grey[300]!,
-        highlightColor: Colors.grey[100]!,
+        baseColor: Colors.grey[200]!,
+        highlightColor: Colors.grey[50]!,
         child: Container(
           margin: const EdgeInsets.only(bottom: 15),
-          height: 100,
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+          height: 220,
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
         ),
       ),
     );
