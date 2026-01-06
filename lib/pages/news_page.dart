@@ -11,240 +11,242 @@ class NewsPage extends StatefulWidget {
   State<NewsPage> createState() => _NewsPageState();
 }
 
-class _NewsPageState extends State<NewsPage> {
+class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
   List<dynamic> _articles = [];
   bool _isLoading = true;
-  String _selectedFilter = "TODOS";
+  late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
 
-  final String _apiKey = "ebfe0c0a67ca4acab293895eca1c5410"; 
+  final List<String> _categories = ["MERCADO", "SOJA", "TRIGO", "CLIMA", "TECH"];
+  final String _apiKey = "ebfe0c0a67ca4acab293895eca1c5410";
+  
+  // Sources de confiance uniquement pour éviter le hors-sujet
+  final String _domains = "elpais.com.uy,elobservador.com.uy,agrofy.com.ar,lanacion.com.ar,infocampo.com.ar,bcr.com.ar,clarin.com";
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: _categories.length, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        _fetchNews(); 
+      }
+    });
     _fetchNews();
   }
 
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchNews({String? searchQuery}) async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
-    // Ciblage géographique et thématique strict
-    String regionQuery = "(Uruguay OR Argentina OR CBOT OR Chicago)";
-    String mandatoryTerms = "(precio OR mercado OR exportacion OR granos OR zafra)";
     String query = "";
+    // On définit des termes métier obligatoires pour garantir la pertinence
+    String agroContext = "(precio OR mercado OR exportacion OR Chicago OR cosecha OR zafra)";
 
-    if (searchQuery != null && searchQuery.isNotEmpty) {
-      query = "$mandatoryTerms AND ($searchQuery)";
+    // LOGIQUE DE RECHERCHE AMÉLIORÉE
+    if (_isSearching && _searchController.text.isNotEmpty) {
+      // Si l'utilisateur cherche, on combine sa recherche avec le contexte agro
+      query = "${_searchController.text} AND $agroContext";
     } else {
-      switch (_selectedFilter) {
-        case "TRIGO":
-          query = "trigo AND $mandatoryTerms AND $regionQuery";
-          break;
-        case "SOJA":
-          query = "soja AND $mandatoryTerms AND $regionQuery";
-          break;
+      // Sinon, on suit les onglets
+      String filter = _categories[_tabController.index];
+      switch (filter) {
         case "CLIMA":
-          query = "(sequia OR lluvias OR clima) AND (agricultura OR campo) AND Uruguay";
+          query = "(sequia OR lluvias OR pronostico OR clima) AND (campo OR agricultura) AND Uruguay";
           break;
         case "TECH":
-          query = "(agrotech OR precision OR maquinaria) AND agricultura";
-          break;
-        case "MERCADO":
-          query = "(dolar OR bolsa OR commodities) AND $mandatoryTerms AND $regionQuery";
+          query = "(agrotech OR maquinaria OR " + '"agricultura de precision"' + ")";
           break;
         default:
-          query = "agricultura AND $mandatoryTerms AND $regionQuery";
+          query = "$filter AND $agroContext";
       }
     }
 
-    // On utilise 'relevancy' pour avoir les news les plus "Agro" et non les plus "récentes inutiles"
-    final url = 'https://newsapi.org/v2/everything?q=$query&language=es&sortBy=relevancy&pageSize=30&apiKey=$_apiKey';
+    // On utilise 'sortBy=relevancy' pour la recherche et 'publishedAt' pour les onglets
+    String sortBy = (_isSearching) ? "relevancy" : "publishedAt";
+    
+    final url = 'https://newsapi.org/v2/everything?q=$query&domains=$_domains&language=es&sortBy=$sortBy&pageSize=30&apiKey=$_apiKey';
 
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        List<dynamic> rawArticles = data['articles'];
-
-        setState(() {
-          _articles = rawArticles.where((a) => 
-            a['urlToImage'] != null && 
-            a['title'] != null &&
-            !a['title'].toString().contains("REMOVED")
-          ).toList();
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            // Filtrage manuel pour s'assurer qu'il y a une image et que c'est pas un article supprimé
+            _articles = (data['articles'] as List).where((a) => 
+              a['urlToImage'] != null && 
+              a['title'] != null && 
+              !a['title'].toString().contains("REMOVED")
+            ).toList();
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _launchURL(String url) async {
-    final Uri uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
   }
 
   @override
   Widget build(BuildContext context) {
-    const Color darkGreen = Color(0xFF1B4D3E);
+    const Color primary = Color(0xFF1B4332);
+    const Color accent = Color(0xFF40916C);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // Fond gris très clair "App Pro"
-      body: Column(
-        children: [
-          _buildHeader(darkGreen),
-          _buildFilterBar(darkGreen),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () => _fetchNews(),
-              color: darkGreen,
-              child: _isLoading ? _buildShimmerEffect() : _buildList(darkGreen),
+      backgroundColor: const Color(0xFFF1F3F5),
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+          SliverAppBar(
+            expandedHeight: 120,
+            floating: true,
+            pinned: true,
+            elevation: 0,
+            backgroundColor: primary,
+            flexibleSpace: FlexibleSpaceBar(
+              title: _isSearching 
+                ? _buildSearchInput() 
+                : const Text("PROPRICE MONITOR", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.white)),
+              titlePadding: const EdgeInsets.only(left: 20, bottom: 65),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader(Color darkGreen) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 50, 20, 10),
-      color: Colors.white,
-      child: Row(
-        children: [
-          if (!_isSearching)
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("MONITOR AGRO", style: TextStyle(color: Color(0xFF1B4D3E), fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: -0.5)),
-                Text("Precios y Mercados", style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 10)),
-              ],
-            )
-          else
-            Expanded(
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8, bottom: 50),
+                child: IconButton(
+                  icon: Icon(_isSearching ? Icons.close : Icons.search, color: Colors.white),
+                  onPressed: () {
+                    setState(() {
+                      _isSearching = !_isSearching;
+                      if (!_isSearching) {
+                        _searchController.clear();
+                        _fetchNews(); // On recharge les news normales
+                      }
+                    });
+                  },
+                ),
+              ),
+            ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(50),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 15),
-                decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
-                child: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  style: const TextStyle(fontSize: 14),
-                  decoration: const InputDecoration(hintText: "Buscar mercado, puerto...", border: InputBorder.none),
-                  onSubmitted: (val) => _fetchNews(searchQuery: val),
+                color: Colors.white,
+                child: TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  indicatorColor: accent,
+                  indicatorWeight: 4,
+                  labelColor: primary,
+                  unselectedLabelColor: Colors.grey,
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                  tabs: _categories.map((c) => Tab(text: c)).toList(),
                 ),
               ),
             ),
-          const SizedBox(width: 10),
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _isSearching = !_isSearching;
-                if (!_isSearching) { _searchController.clear(); _fetchNews(); }
-              });
-            },
-            child: CircleAvatar(
-              backgroundColor: darkGreen.withOpacity(0.1),
-              child: Icon(_isSearching ? Icons.close : Icons.search, color: darkGreen, size: 20),
-            ),
-          )
+          ),
         ],
+        body: RefreshIndicator(
+          onRefresh: () => _fetchNews(),
+          color: primary,
+          child: _isLoading ? _buildShimmer() : _buildList(primary),
+        ),
       ),
     );
   }
 
-  Widget _buildFilterBar(Color darkGreen) {
-    final filters = ["TODOS", "MERCADO", "SOJA", "TRIGO", "CLIMA", "TECH"];
+  Widget _buildSearchInput() {
     return Container(
-      height: 55,
-      color: Colors.white,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 15),
-        itemCount: filters.length,
-        itemBuilder: (context, index) {
-          final filter = filters[index];
-          final isSelected = _selectedFilter == filter;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-            child: ChoiceChip(
-              label: Text(filter),
-              selected: isSelected,
-              onSelected: (val) {
-                setState(() => _selectedFilter = filter);
-                _fetchNews();
-              },
-              selectedColor: darkGreen,
-              backgroundColor: Colors.grey[50],
-              labelStyle: TextStyle(
-                color: isSelected ? Colors.white : darkGreen,
-                fontSize: 11,
-                fontWeight: FontWeight.bold
-              ),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              side: BorderSide(color: isSelected ? darkGreen : Colors.grey[200]!),
-            ),
-          );
-        },
+      height: 40,
+      margin: const EdgeInsets.only(right: 40),
+      child: TextField(
+        controller: _searchController,
+        autofocus: true,
+        style: const TextStyle(color: Colors.white, fontSize: 15),
+        cursorColor: Colors.white,
+        decoration: const InputDecoration(
+          hintText: "Escribe y pulsa enter...",
+          hintStyle: TextStyle(color: Colors.white54, fontSize: 13),
+          border: InputBorder.none,
+        ),
+        onSubmitted: (val) => _fetchNews(), // Lance la recherche au clic sur "Enter"
       ),
     );
   }
 
-  Widget _buildList(Color darkGreen) {
+  Widget _buildList(Color primary) {
     if (_articles.isEmpty) {
-      return const Center(child: Padding(
-        padding: EdgeInsets.all(40),
-        child: Text("No hay noticias específicas para este rubro ahora.", textAlign: TextAlign.center),
-      ));
+      return const Center(child: Text("No se encontraron noticias específicas."));
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(16),
       itemCount: _articles.length,
       itemBuilder: (context, index) {
         final art = _articles[index];
-        return _buildNewsCard(art, darkGreen);
+        return _buildAgroCard(art, primary);
       },
     );
   }
 
-  Widget _buildNewsCard(dynamic art, Color darkGreen) {
-    return GestureDetector(
-      onTap: () => _launchURL(art['url']),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 15),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
-        ),
+  Widget _buildAgroCard(dynamic art, Color primary) {
+    String date = DateFormat('dd MMM').format(DateTime.parse(art['publishedAt']));
+    
+    // Analyse de tendance simple pour les flèches
+    String title = art['title'].toString().toLowerCase();
+    bool isUp = title.contains("sube") || title.contains("alza") || title.contains("récord");
+    bool isDown = title.contains("baja") || title.contains("cae");
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: InkWell(
+        onTap: () => launchUrl(Uri.parse(art['url']), mode: LaunchMode.externalApplication),
+        borderRadius: BorderRadius.circular(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Image.network(
-                art['urlToImage'], 
-                height: 160, width: double.infinity, fit: BoxFit.cover,
-                errorBuilder: (c,e,s) => Container(height: 160, color: Colors.grey[100]),
+            AspectRatio(
+              aspectRatio: 21 / 9,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                child: Image.network(
+                  art['urlToImage'], 
+                  fit: BoxFit.cover,
+                  errorBuilder: (c,e,s) => Container(color: Colors.grey[200]),
+                ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(15),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Text(art['source']['name'].toString().toUpperCase(), style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w900, fontSize: 9)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(5)),
+                        child: Text(art['source']['name'].toUpperCase(), style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w900, fontSize: 9)),
+                      ),
                       const Spacer(),
-                      Text(DateFormat('dd MMM').format(DateTime.parse(art['publishedAt'])), style: TextStyle(color: Colors.grey[400], fontSize: 10)),
+                      Text(date, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                      const SizedBox(width: 8),
+                      if (isUp || isDown) Icon(isUp ? Icons.trending_up : Icons.trending_down, color: isUp ? Colors.green : Colors.red, size: 16),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   Text(
-                    art['title'] ?? "", 
-                    style: TextStyle(color: darkGreen, fontWeight: FontWeight.bold, fontSize: 14, height: 1.2),
+                    art['title'], 
+                    style: TextStyle(color: primary, fontWeight: FontWeight.bold, fontSize: 14, height: 1.3),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -257,18 +259,14 @@ class _NewsPageState extends State<NewsPage> {
     );
   }
 
-  Widget _buildShimmerEffect() {
+  Widget _buildShimmer() {
     return ListView.builder(
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(16),
       itemCount: 3,
-      itemBuilder: (context, index) => Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.grey[50]!,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 15),
-          height: 220,
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-        ),
+      itemBuilder: (c, i) => Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        height: 200,
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
