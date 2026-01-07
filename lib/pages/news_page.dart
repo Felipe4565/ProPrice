@@ -55,7 +55,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
-    String agroScope = "+(precio OR mercado OR exportacion OR Chicago OR CBOT OR cosecha OR zafra)";
+    String agroScope = "+(agro OR mercado OR precios)";
     String query = "";
 
     if (_isSearching && _searchController.text.isNotEmpty) {
@@ -66,12 +66,12 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
         case "SOJA": query = "+soja AND $agroScope"; break;
         case "TRIGO": query = "+trigo AND $agroScope"; break;
         case "CLIMA": query = "+(sequia OR lluvias OR pronostico) AND Uruguay"; break;
-        case "TECH": query = "+(agrotech OR maquinaria OR \"agricultura de precision\")"; break;
-        default: query = "+(granos OR commodities OR cereales) AND $agroScope";
+        case "TECH": query = "+(agrotech OR maquinaria)"; break;
+        default: query = "+(granos OR commodities) AND $agroScope";
       }
     }
 
-    final url = 'https://newsapi.org/v2/everything?q=$query&domains=$_domains&language=es&sortBy=publishedAt&pageSize=40&apiKey=$_apiKey';
+    final url = 'https://newsapi.org/v2/everything?q=$query&domains=$_domains&language=es&sortBy=publishedAt&pageSize=20&apiKey=$_apiKey';
 
     try {
       final response = await http.get(Uri.parse(url));
@@ -87,6 +87,11 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
             if (!_isSearching) _cache[_tabController.index] = results;
             _isLoading = false;
           });
+
+          // OPTIMISATION : Pré-chargement des images en mémoire
+          for (var art in results) {
+            precacheImage(NetworkImage(art['urlToImage']), context);
+          }
         }
       }
     } catch (e) {
@@ -145,8 +150,8 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("PROPRICE MONITOR", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.white)),
-        Text("INTELIGENCIA AGRO", style: TextStyle(fontSize: 9, color: Color(0xFF74C69D), fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+        Text("NOTICIAS PROPRICE", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.white)),
+        Text("TEMAS AGRICOLAS", style: TextStyle(fontSize: 9, color: Color(0xFF74C69D), fontWeight: FontWeight.bold, letterSpacing: 1.2)),
       ],
     );
   }
@@ -170,6 +175,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
     if (_articles.isEmpty) return const Center(child: Text("Sin noticias."));
     return ListView.builder(
       padding: const EdgeInsets.all(16),
+      physics: const BouncingScrollPhysics(), // Scroll plus fluide
       itemCount: _articles.length,
       itemBuilder: (context, index) {
         final art = _articles[index];
@@ -191,7 +197,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 20, offset: const Offset(0, 10))
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 8))
         ],
       ),
       child: Column(
@@ -202,7 +208,22 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
                 aspectRatio: 16 / 9,
                 child: ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                  child: Image.network(art['urlToImage'], fit: BoxFit.cover, errorBuilder: (c,e,s) => Container(color: Colors.grey[200])),
+                  child: Image.network(
+                    art['urlToImage'], 
+                    fit: BoxFit.cover,
+                    cacheWidth: 800, 
+                    // Animation d'apparition fluide
+                    frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                      if (wasSynchronouslyLoaded) return child;
+                      return AnimatedOpacity(
+                        opacity: frame == null ? 0 : 1,
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOut,
+                        child: child,
+                      );
+                    },
+                    errorBuilder: (c,e,s) => Container(color: Colors.grey[200], child: const Icon(Icons.broken_image)),
+                  ),
                 ),
               ),
               Positioned(
