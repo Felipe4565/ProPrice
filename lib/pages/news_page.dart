@@ -16,6 +16,7 @@ class NewsPage extends StatefulWidget {
 class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
   final Map<int, List<dynamic>> _cache = {};
   List<dynamic> _articles = [];
+  List<dynamic> _tweets = []; 
   bool _isLoading = true;
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
@@ -42,13 +43,33 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
       }
     });
     _fetchNews();
+    _fetchTweets(); 
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    _searchController.dispose();
-    super.dispose();
+  // MODIFICATION : Récupération réelle des tweets via Nitter/RSS2JSON
+  Future<void> _fetchTweets() async {
+    const String twitterUser = "BCRprensa"; // Compte de la Bourse de Rosario
+    const String apiUrl = "https://api.rss2json.com/v1/api.json?rss_url=https://nitter.net/$twitterUser/rss";
+
+    try {
+      final response = await http.get(Uri.parse(apiUrl));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List items = data['items'];
+        if (mounted) {
+          setState(() {
+            _tweets = items.take(6).map((item) => {
+              "user": "@$twitterUser",
+              "text": item['title'], 
+              "time": "Ahora",
+              "link": item['link'] // Lien réel vers le tweet
+            }).toList();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Erreur Tweets: $e");
+    }
   }
 
   Future<void> _fetchNews() async {
@@ -87,8 +108,6 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
             if (!_isSearching) _cache[_tabController.index] = results;
             _isLoading = false;
           });
-
-          // OPTIMISATION : Pré-chargement des images en mémoire
           for (var art in results) {
             precacheImage(NetworkImage(art['urlToImage']), context);
           }
@@ -139,9 +158,106 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
         onRefresh: () async {
           HapticFeedback.lightImpact();
           await _fetchNews();
+          await _fetchTweets();
         },
         color: forestGreen,
-        child: _isLoading ? _buildShimmer() : _buildContent(forestGreen),
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: _buildTwitterPulse(),
+            ),
+            
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Text(
+                  "NOTICIAS DESTACADAS",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                    letterSpacing: 1.1
+                  ),
+                ),
+              ),
+            ),
+
+            _isLoading 
+              ? SliverFillRemaining(child: _buildShimmer())
+              : SliverPadding(
+                  padding: const EdgeInsets.all(16),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final art = _articles[index];
+                        String title = art['title'].toString().toLowerCase();
+                        bool isUp = title.contains("sube") || title.contains("alza") || title.contains("récord") || title.contains("suba");
+                        bool isDown = title.contains("baja") || title.contains("cae") || title.contains("caída");
+                        return _buildPremiumCard(art, forestGreen, isUp, isDown);
+                      },
+                      childCount: _articles.length,
+                    ),
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTwitterPulse() {
+    return Container(
+      height: 140,
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _tweets.isEmpty ? 3 : _tweets.length,
+        itemBuilder: (context, index) {
+          if (_tweets.isEmpty) {
+            return Container(
+              width: 250,
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(20)),
+            );
+          }
+          final tweet = _tweets[index];
+          return GestureDetector(
+            onTap: () => launchUrl(Uri.parse(tweet['link']), mode: LaunchMode.externalApplication),
+            child: Container(
+              width: 280,
+              margin: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.blue.withOpacity(0.1)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.verified, color: Colors.blue, size: 18), // Badge bleu pour faire plus vrai
+                      const SizedBox(width: 8),
+                      Text(tweet['user'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue, fontSize: 13)),
+                      const Spacer(),
+                      Text(tweet['time'], style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    tweet['text'], 
+                    style: const TextStyle(fontSize: 13, height: 1.3, color: Colors.black87),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -171,34 +287,13 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildContent(Color primary) {
-    if (_articles.isEmpty) return const Center(child: Text("Sin noticias."));
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      physics: const BouncingScrollPhysics(), // Scroll plus fluide
-      itemCount: _articles.length,
-      itemBuilder: (context, index) {
-        final art = _articles[index];
-        String title = art['title'].toString().toLowerCase();
-        bool isUp = title.contains("sube") || title.contains("alza") || title.contains("récord") || title.contains("suba");
-        bool isDown = title.contains("baja") || title.contains("cae") || title.contains("caída");
-
-        return _buildPremiumCard(art, primary, isUp, isDown);
-      },
-    );
-  }
-
   Widget _buildPremiumCard(dynamic art, Color primary, bool isUp, bool isDown) {
     String time = DateFormat('dd MMM, HH:mm').format(DateTime.parse(art['publishedAt']));
-
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 8))
-        ],
+        color: Colors.white, borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: Column(
         children: [
@@ -212,15 +307,9 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
                     art['urlToImage'], 
                     fit: BoxFit.cover,
                     cacheWidth: 800, 
-                    // Animation d'apparition fluide
                     frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
                       if (wasSynchronouslyLoaded) return child;
-                      return AnimatedOpacity(
-                        opacity: frame == null ? 0 : 1,
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeOut,
-                        child: child,
-                      );
+                      return AnimatedOpacity(opacity: frame == null ? 0 : 1, duration: const Duration(milliseconds: 400), child: child);
                     },
                     errorBuilder: (c,e,s) => Container(color: Colors.grey[200], child: const Icon(Icons.broken_image)),
                   ),
@@ -230,10 +319,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
                 top: 16, left: 16,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(12)),
                   child: Text(art['source']['name'].toString().toUpperCase(), 
                     style: const TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
@@ -260,13 +346,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
                     Text(time, style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
                     IconButton(
                       icon: const Icon(Icons.share_outlined, size: 20),
-                      onPressed: () async {
-                        try {
-                          await Share.share("${art['title']}\n\n${art['url']}");
-                        } catch (e) {
-                          debugPrint("Error sharing: $e");
-                        }
-                      },
+                      onPressed: () => Share.share("${art['title']}\n\n${art['url']}"),
                     )
                   ],
                 ),
@@ -276,8 +356,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
                   child: Text(
                     art['title'], 
                     style: TextStyle(color: primary, fontWeight: FontWeight.w900, fontSize: 16, height: 1.4),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: 3, overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
