@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; 
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:async'; // Ajouté pour le Timeout
+import 'dart:async';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart'; 
+import 'article_detail_page.dart'; // Assure-toi que le fichier existe
 
 class NewsPage extends StatefulWidget {
   const NewsPage({super.key});
@@ -19,7 +20,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
   List<dynamic> _articles = [];
   List<dynamic> _tweets = []; 
   bool _isLoading = true;
-  bool _isTweetsLoading = true; // Nouveau : pour gérer le chargement des tweets séparément
+  bool _isTweetsLoading = true;
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
@@ -48,20 +49,15 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
     _fetchTweets(); 
   }
 
-  // RÉPARATION : Gestion du chargement infini avec Timeout et Fallback
   Future<void> _fetchTweets() async {
     setState(() => _isTweetsLoading = true);
-    
     const String twitterUser = "BCRprensa"; 
-    // Changement d'instance vers une plus légère
     const String nitterInstance = "https://nitter.privacydev.net"; 
     final String rssUrl = "$nitterInstance/$twitterUser/rss";
     final String apiUrl = "https://api.rss2json.com/v1/api.json?rss_url=${Uri.encodeComponent(rssUrl)}";
 
     try {
-      // On donne 5 secondes max à l'API pour répondre
       final response = await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 5));
-      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List items = data['items'] ?? [];
@@ -79,15 +75,14 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
         }
       }
     } catch (e) {
-      debugPrint("Erreur ou Timeout Tweets: $e");
+      debugPrint("Erreur Tweets: $e");
     }
 
-    // SI L'API ÉCHOUE (Timeout ou Erreur) : On met des données de secours pour arrêter le chargement infini
     if (mounted) {
       setState(() {
         _tweets = [
-          {"user": "@BCRprensa", "text": "Mercado: Los valores de la soja operan estables. Trigo con tendencia al alza.", "time": "1h", "link": "https://twitter.com/BCRprensa"},
-          {"user": "@BCRprensa", "text": "Clima: Alerta por tormentas fuertes en el litoral uruguayo para esta noche.", "time": "2h", "link": "https://twitter.com/BCRprensa"},
+          {"user": "@BCRprensa", "text": "Mercado: Los valores de la soja operan estables.", "time": "1h", "link": "https://twitter.com/BCRprensa"},
+          {"user": "@BCRprensa", "text": "Clima: Alerta por tormentas fuertes.", "time": "2h", "link": "https://twitter.com/BCRprensa"},
         ];
         _isTweetsLoading = false;
       });
@@ -183,25 +178,16 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            SliverToBoxAdapter(
-              child: _buildTwitterPulse(),
-            ),
-            
+            SliverToBoxAdapter(child: _buildTwitterPulse()),
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
                 child: Text(
                   "NOTICIAS DESTACADAS",
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                    letterSpacing: 1.1
-                  ),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.1),
                 ),
               ),
             ),
-
             _isLoading 
               ? SliverFillRemaining(child: _buildShimmer())
               : SliverPadding(
@@ -232,7 +218,6 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        // On utilise _isTweetsLoading pour décider d'afficher le shimmer ou pas
         itemCount: _isTweetsLoading ? 3 : _tweets.length,
         itemBuilder: (context, index) {
           if (_isTweetsLoading) {
@@ -256,7 +241,6 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.blue.withOpacity(0.1)),
                 boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
               ),
               child: Column(
@@ -272,12 +256,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    tweet['text'], 
-                    style: const TextStyle(fontSize: 13, height: 1.3, color: Colors.black, fontWeight: FontWeight.w500),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(tweet['text'], style: const TextStyle(fontSize: 13, height: 1.3), maxLines: 3, overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
@@ -302,87 +281,86 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
       controller: _searchController,
       autofocus: true,
       style: const TextStyle(color: Colors.white),
-      cursorColor: Colors.white,
-      decoration: const InputDecoration(
-        hintText: "Buscar mercados...",
-        hintStyle: TextStyle(color: Colors.white54),
-        border: InputBorder.none,
-      ),
+      decoration: const InputDecoration(hintText: "Buscar...", hintStyle: TextStyle(color: Colors.white54), border: InputBorder.none),
       onSubmitted: (val) => _fetchNews(),
     );
   }
 
   Widget _buildPremiumCard(dynamic art, Color primary, bool isUp, bool isDown) {
     String time = DateFormat('dd MMM, HH:mm').format(DateTime.parse(art['publishedAt']));
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 8))],
-      ),
-      child: Column(
-        children: [
-          Stack(
-            children: [
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                  child: Image.network(
-                    art['urlToImage'], 
-                    fit: BoxFit.cover,
-                    errorBuilder: (c,e,s) => Container(color: Colors.grey[200], child: const Icon(Icons.broken_image)),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 16, left: 16,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(12)),
-                  child: Text(art['source']['name'].toString().toUpperCase(), 
-                    style: const TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              if (isUp || isDown)
-                Positioned(
-                  top: 16, right: 16,
-                  child: CircleAvatar(
-                    backgroundColor: isUp ? Colors.green : Colors.red,
-                    radius: 18,
-                    child: Icon(isUp ? Icons.trending_up : Icons.trending_down, color: Colors.white, size: 20),
-                  ),
-                ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => ArticleDetailPage(article: art)),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 8))],
+        ),
+        child: Column(
+          children: [
+            Stack(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(time, style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
-                    IconButton(
-                      icon: const Icon(Icons.share_outlined, size: 20),
-                      onPressed: () => Share.share("${art['title']}\n\n${art['url']}"),
-                    )
-                  ],
-                ),
-                const SizedBox(height: 10),
-                InkWell(
-                  onTap: () => launchUrl(Uri.parse(art['url']), mode: LaunchMode.externalApplication),
-                  child: Text(
-                    art['title'], 
-                    style: TextStyle(color: primary, fontWeight: FontWeight.w900, fontSize: 16, height: 1.4),
-                    maxLines: 3, overflow: TextOverflow.ellipsis,
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    child: Hero(
+                      tag: art['url'],
+                      child: Image.network(
+                        art['urlToImage'] ?? '',
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => Container(color: Colors.grey[200], child: const Icon(Icons.broken_image)),
+                      ),
+                    ),
                   ),
                 ),
+                Positioned(
+                  top: 16, left: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(12)),
+                    child: Text(art['source']['name'].toString().toUpperCase(), style: const TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                if (isUp || isDown)
+                  Positioned(
+                    top: 16, right: 16,
+                    child: CircleAvatar(
+                      backgroundColor: isUp ? Colors.green : Colors.red,
+                      radius: 18,
+                      child: Icon(isUp ? Icons.trending_up : Icons.trending_down, color: Colors.white, size: 20),
+                    ),
+                  ),
               ],
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(time, style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
+                      IconButton(
+                        icon: const Icon(Icons.share_outlined, size: 20),
+                        onPressed: () => Share.share("${art['title']}\n\n${art['url']}"),
+                      )
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(art['title'] ?? '', style: TextStyle(color: primary, fontWeight: FontWeight.w900, fontSize: 16, height: 1.4), maxLines: 3, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
