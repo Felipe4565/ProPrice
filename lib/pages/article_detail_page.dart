@@ -1,136 +1,265 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart'; // Pour le bouton "Voir l'article complet"
-import 'package:intl/intl.dart';                 // Pour formater la date
-import 'package:share_plus/share_plus.dart';     // Pour le bouton partager
+import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
+import 'dart:ui';
 
 class ArticleDetailPage extends StatelessWidget {
   final dynamic article;
 
   const ArticleDetailPage({super.key, required this.article});
 
+  // 1. Calcul dynamique du temps de lecture
+  String _calculateReadingTime(String? text) {
+    if (text == null || text.isEmpty) return "1 min lectura";
+    int words = text.split(' ').length;
+    int time = (words / 200).ceil();
+    return "$time min lectura";
+  }
+
+  // 2. Nettoyage du texte NewsAPI (enlève le "[+1234 chars]")
+  String _cleanDescription(String? text) {
+    if (text == null) return "Sin descripción disponible.";
+    return text.replaceAll(RegExp(r'\[\+\d+ chars\]'), '').trim();
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Couleur principale de ton application
+    // Couleurs thématiques
     const Color forestGreen = Color(0xFF1B4332);
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Formatage sécurisé de la date
+    String formattedDate = "Reciente";
+    try {
+      if (article['publishedAt'] != null) {
+        formattedDate = DateFormat('EEEE, d MMMM yyyy').format(DateTime.parse(article['publishedAt']));
+      }
+    } catch (e) {
+      formattedDate = "Reciente";
+    }
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: forestGreen,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-          onPressed: () => Navigator.pop(context), // Retour à la liste
-        ),
-        title: Text(
-          article['source']['name'] ?? "Noticia",
-          style: const TextStyle(fontSize: 17, color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share_outlined, color: Colors.white),
-            onPressed: () => Share.share("Mira esta noticia: ${article['title']}\n\n${article['url']}"),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // IMAGE DE L'ARTICLE
-            Hero(
-              tag: article['url'], // Animation fluide depuis la page précédente
-              child: Image.network(
-                article['urlToImage'] ?? 'https://via.placeholder.com/400x200',
-                width: double.infinity,
-                height: 250,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  height: 250,
-                  color: Colors.grey[200],
-                  child: const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+      backgroundColor: isDark ? const Color(0xFF081C15) : Colors.white,
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          // HEADER : IMAGE AVEC EFFET SLIVER & STRETCH
+          SliverAppBar(
+            expandedHeight: 380.0,
+            pinned: true,
+            stretch: true,
+            backgroundColor: forestGreen,
+            elevation: 0,
+            leading: _buildFloatingButton(
+              context: context,
+              icon: Icons.arrow_back_ios_new,
+              onTap: () => Navigator.pop(context),
+            ),
+            actions: [
+              _buildFloatingButton(
+                context: context,
+                icon: Icons.share_outlined,
+                onTap: () => Share.share("Mira esta noticia: ${article['title']}\n\n${article['url']}"),
+              ),
+              const SizedBox(width: 10),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              stretchModes: const [
+                StretchMode.zoomBackground,
+                StretchMode.blurBackground,
+              ],
+              centerTitle: true,
+              title: Text(
+                article['source']?['name'] ?? "Noticia",
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  shadows: [Shadow(blurRadius: 10, color: Colors.black54)],
                 ),
               ),
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Hero(
+                    tag: article['url'] ?? 'news_image',
+                    child: Image.network(
+                      article['urlToImage'] ?? 'https://via.placeholder.com/800x600',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stack) => Container(color: Colors.grey[300]),
+                    ),
+                  ),
+                  // Dégradé pour la lisibilité du titre dans l'AppBar
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.black45, Colors.transparent, Colors.black87],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ),
 
-            Padding(
-              padding: const EdgeInsets.all(20.0),
+          // CORPS DE L'ARTICLE
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 25, 20, 50),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // TITRE
-                  Text(
-                    article['title'] ?? '',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      height: 1.3,
-                      color: Color(0xFF081C15),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 15),
-
-                  // DATE ET SOURCE
+                  // Ligne d'infos : Badge et Temps de lecture
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
-                      const SizedBox(width: 5),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: forestGreen.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          (article['source']?['name'] ?? "NEWS").toUpperCase(),
+                          style: const TextStyle(
+                            color: forestGreen, 
+                            fontWeight: FontWeight.bold, 
+                            fontSize: 11
+                          ),
+                        ),
+                      ),
                       Text(
-                        DateFormat('dd MMMM yyyy, HH:mm').format(DateTime.parse(article['publishedAt'])),
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        _calculateReadingTime(article['description']),
+                        style: TextStyle(
+                          color: isDark ? Colors.grey[400] : Colors.grey[600], 
+                          fontSize: 12, 
+                          fontStyle: FontStyle.italic
+                        ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 20),
 
+                  // TITRE PRINCIPAL
+                  Text(
+                    article['title'] ?? 'Sin título',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: isDark ? Colors.white : const Color(0xFF081C15),
+                      height: 1.15,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+
+                  // DATE
+                  Text(
+                    formattedDate,
+                    style: TextStyle(
+                      color: isDark ? Colors.grey[500] : Colors.grey[600], 
+                      fontSize: 13
+                    ),
+                  ),
+                  
                   const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Divider(),
+                    padding: EdgeInsets.symmetric(vertical: 25),
+                    child: Divider(thickness: 0.7),
                   ),
 
                   // DESCRIPTION / CONTENU
                   Text(
-                    article['description'] ?? "Sin descripción disponible.",
-                    style: const TextStyle(
-                      fontSize: 17,
-                      height: 1.6,
-                      color: Colors.black87,
-                      letterSpacing: 0.2,
+                    _cleanDescription(article['description']),
+                    style: TextStyle(
+                      fontSize: 19,
+                      height: 1.8,
+                      color: isDark ? Colors.grey[300] : Colors.black87,
+                      fontFamily: 'Georgia', // Optionnel, donne un style journal
                     ),
                   ),
 
+                  const SizedBox(height: 45),
+
+                  // BOUTON D'ACTION FINAL (CTA)
+                  _buildCallToAction(forestGreen, article['url'] ?? ""),
                   const SizedBox(height: 40),
-
-                  // BOUTON POUR VOIR L'ARTICLE ORIGINAL
-                  Center(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: forestGreen,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        elevation: 2,
-                      ),
-                      onPressed: () async {
-                        final Uri url = Uri.parse(article['url']);
-                        if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text("No se pudo abrir el enlace")),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.launch, size: 18),
-                      label: const Text(
-                        "Leer artículo completo",
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 50),
                 ],
               ),
             ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Widget des boutons de l'AppBar (Glassmorphism)
+  Widget _buildFloatingButton({
+    required BuildContext context, 
+    required IconData icon, 
+    required VoidCallback onTap
+  }) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(50),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Container(
+            color: Colors.white.withOpacity(0.25),
+            child: IconButton(
+              icon: Icon(icon, color: Colors.white, size: 20),
+              onPressed: onTap,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Widget du bouton "Leer más" stylisé
+  Widget _buildCallToAction(Color color, String url) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.35), 
+            blurRadius: 20, 
+            offset: const Offset(0, 10)
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () async {
+            if (url.isNotEmpty) {
+              final Uri uri = Uri.parse(url);
+              if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+                // Optionnel : Ajouter un SnackBar en cas d'erreur
+              }
+            }
+          },
+          child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(
+              child: Text(
+                "CONTINUAR LEYENDO",
+                style: TextStyle(
+                  color: Colors.white, 
+                  fontWeight: FontWeight.bold, 
+                  letterSpacing: 1.5,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
