@@ -23,7 +23,10 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
 
-  // Mix entre tes boutons Home (Cultures) et l'utilité stratégique
+  // --- NOUVELLES VARIABLES LOCALISATION ---
+  String _userCountry = "Uruguay OR Argentina"; 
+  String _locationDisplay = "MERCADO REGIONAL";
+
   final List<String> _categories = ["SOJA", "MAIZ", "TRIGO", "CLIMA", "ECONOMÍA", "TECH"];
   
   final String _apiKey = "ebfe0c0a67ca4acab293895eca1c5410";
@@ -33,6 +36,10 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _tabController = TabController(length: _categories.length, vsync: this);
+    
+    // Initialisation avec détection de pays
+    _initLocationAndNews();
+
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         if (_cache.containsKey(_tabController.index) && !_isSearching) {
@@ -45,7 +52,75 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
         }
       }
     });
+  }
+
+  // --- LOGIQUE LOCALISATION ---
+  Future<void> _initLocationAndNews() async {
+    await _getUserLocation();
     _fetchNews();
+  }
+
+  Future<void> _getUserLocation() async {
+    try {
+      final response = await http.get(Uri.parse('https://ipapi.co/json/'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        _updateLocationState(data['country_name'] ?? "");
+      }
+    } catch (e) {
+      debugPrint("Loc error: $e");
+    }
+  }
+
+  void _updateLocationState(String country) {
+    if (!mounted) return;
+    setState(() {
+      _cache.clear(); // Important : on vide le cache pour forcer la news locale
+      if (country == "Uruguay") {
+        _userCountry = "Uruguay";
+        _locationDisplay = "NOTICIAS DE URUGUAY";
+      } else if (country == "Argentina") {
+        _userCountry = "Argentina";
+        _locationDisplay = "NOTICIAS DE ARGENTINA";
+      } else {
+        _userCountry = "Uruguay OR Argentina";
+        _locationDisplay = "MERCADO REGIONAL";
+      }
+    });
+  }
+
+  void _showLocationPicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+            const SizedBox(height: 20),
+            const Text("Seleccionar Región", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const SizedBox(height: 10),
+            ListTile(
+              leading: const Icon(Icons.place, color: Color(0xFF1B4332)),
+              title: const Text("Uruguay"),
+              onTap: () { _updateLocationState("Uruguay"); Navigator.pop(context); _fetchNews(); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.place, color: Color(0xFF1B4332)),
+              title: const Text("Argentina"),
+              onTap: () { _updateLocationState("Argentina"); Navigator.pop(context); _fetchNews(); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.public, color: Color(0xFF1B4332)),
+              title: const Text("Regional (Ambos)"),
+              onTap: () { _updateLocationState("Global"); Navigator.pop(context); _fetchNews(); },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _fetchNews() async {
@@ -62,16 +137,15 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
         case "SOJA": 
           query = "soja AND (mercado OR precios OR cosecha)"; break;
         case "MAIZ": 
-          // Recherche élargie (maiz sans accent + corn) pour éviter le vide
           query = "(maiz OR corn) AND (mercado OR precios OR exportacion)"; break;
         case "TRIGO": 
           query = "trigo AND (mercado OR precios OR bolsa)"; break;
         case "CLIMA": 
-          query = "(sequia OR lluvias OR pronostico OR clima) AND (Uruguay OR Argentina)"; break;
+          query = "(sequia OR lluvias OR pronostico OR clima) AND $_userCountry"; break;
         case "ECONOMÍA": 
           query = "(dolar OR retenciones OR exportacion OR economia) AND agro"; break;
         case "TECH": 
-          query = "(agrotech OR maquinaria OR drones OR riego)"; break;
+          query = "(agrotech OR machinery OR drones OR riego)"; break;
         default:
           query = "agro mercado granos";
       }
@@ -112,6 +186,11 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
         elevation: 0,
         title: _isSearching ? _buildSearchInput() : _buildModernTitle(),
         actions: [
+          // BOUTON LOCALISATION AJOUTÉ
+          IconButton(
+            icon: const Icon(Icons.location_on_outlined, color: Colors.white),
+            onPressed: _showLocationPicker,
+          ),
           IconButton(
             icon: Icon(_isSearching ? Icons.close : Icons.search, color: Colors.white),
             onPressed: () {
@@ -145,16 +224,16 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
         child: _isLoading 
           ? _buildShimmer()
           : _articles.isEmpty 
-              ? _buildEmptyState(forestGreen) // Gestion du cas vide
+              ? _buildEmptyState(forestGreen)
               : CustomScrollView(
                   physics: const BouncingScrollPhysics(),
                   slivers: [
-                    const SliverToBoxAdapter(
+                    SliverToBoxAdapter(
                       child: Padding(
-                        padding: EdgeInsets.fromLTRB(20, 25, 20, 10),
+                        padding: const EdgeInsets.fromLTRB(20, 25, 20, 10),
                         child: Text(
-                          "NOTICIAS ACTUALIZADAS",
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2),
+                          _tabController.index == 3 ? "CLIMA: $_userCountry".toUpperCase() : "NOTICIAS ACTUALIZADAS",
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2),
                         ),
                       ),
                     ),
@@ -180,7 +259,6 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
     );
   }
 
-  // WIDGET POUR LA PAGE VIDE
   Widget _buildEmptyState(Color primary) {
     return Center(
       child: Padding(
@@ -190,17 +268,15 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
           children: [
             Icon(Icons.search_off_rounded, size: 80, color: Colors.grey[300]),
             const SizedBox(height: 20),
-            const Text(
-              "No hay noticias recientes",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
-            ),
+            const Text("No hay noticias recientes", textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
             const SizedBox(height: 10),
-            Text(
-              "No encontramos artículos para este rubro hoy. Intenta refrescar o cambiar de categoría.",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            ),
+            Text("No encontramos artículos pour $_userCountry hoy.", textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+            const SizedBox(height: 20),
+            TextButton.icon(
+              onPressed: () => _fetchNews(),
+              icon: Icon(Icons.refresh, color: primary),
+              label: Text("Reintentar", style: TextStyle(color: primary)),
+            )
           ],
         ),
       ),
@@ -208,13 +284,11 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
   }
 
   Widget _buildModernTitle() {
-    return const Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("PROPRICE NEWS", 
-          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.white)),
-        Text("MERCADO EN TIEMPO REAL", 
-          style: TextStyle(fontSize: 9, color: Color(0xFF74C69D), fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+        const Text("PROPRICE NEWS", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.white)),
+        Text(_locationDisplay, style: const TextStyle(fontSize: 9, color: Color(0xFF74C69D), fontWeight: FontWeight.bold, letterSpacing: 1.2)),
       ],
     );
   }
@@ -224,11 +298,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
       controller: _searchController,
       autofocus: true,
       style: const TextStyle(color: Colors.white),
-      decoration: const InputDecoration(
-        hintText: "Buscar noticia...", 
-        hintStyle: TextStyle(color: Colors.white54), 
-        border: InputBorder.none
-      ),
+      decoration: const InputDecoration(hintText: "Buscar noticia...", hintStyle: TextStyle(color: Colors.white54), border: InputBorder.none),
       onSubmitted: (val) => _fetchNews(),
     );
   }
@@ -241,10 +311,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
 
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => ArticleDetailPage(article: art)),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (context) => ArticleDetailPage(article: art)));
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 24),

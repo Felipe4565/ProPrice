@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'news_page.dart'; 
+import 'settings_page.dart'; 
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -95,8 +96,10 @@ class _HomePageState extends State<HomePage> {
       bodyContent = const NewsPage();
     } else if (_selectedIndex == 0) {
       bodyContent = _buildHomeContent(darkGreen);
+    } else if (_selectedIndex == 2) {
+      bodyContent = const SettingsPage(); 
     } else {
-      bodyContent = const Center(child: Text("Page en construction"));
+      bodyContent = const Center(child: Text("Perfil en construcción"));
     }
 
     return Scaffold(
