@@ -23,7 +23,9 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
 
-  final List<String> _categories = ["MERCADO", "SOJA", "TRIGO", "CLIMA", "TECH"];
+  // Mix entre tes boutons Home (Cultures) et l'utilité stratégique
+  final List<String> _categories = ["SOJA", "MAIZ", "TRIGO", "CLIMA", "ECONOMÍA", "TECH"];
+  
   final String _apiKey = "ebfe0c0a67ca4acab293895eca1c5410";
   final String _domains = "elpais.com.uy,elobservador.com.uy,agrofy.com.ar,lanacion.com.ar,infocampo.com.ar,bcr.com.ar,ambito.com,clarin.com";
 
@@ -50,19 +52,28 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
-    String agroScope = "+(agro OR mercado OR precios)";
     String query = "";
+    String filter = _categories[_tabController.index];
 
     if (_isSearching && _searchController.text.isNotEmpty) {
-      query = "${_searchController.text} AND $agroScope";
+      query = "${_searchController.text} AND (agro OR mercado)";
     } else {
-      String filter = _categories[_tabController.index];
       switch (filter) {
-        case "SOJA": query = "+soja AND $agroScope"; break;
-        case "TRIGO": query = "+trigo AND $agroScope"; break;
-        case "CLIMA": query = "+(sequia OR lluvias OR pronostico) AND Uruguay"; break;
-        case "TECH": query = "+(agrotech OR machinery)"; break;
-        default: query = "+(granos OR commodities) AND $agroScope";
+        case "SOJA": 
+          query = "soja AND (mercado OR precios OR cosecha)"; break;
+        case "MAIZ": 
+          // Recherche élargie (maiz sans accent + corn) pour éviter le vide
+          query = "(maiz OR corn) AND (mercado OR precios OR exportacion)"; break;
+        case "TRIGO": 
+          query = "trigo AND (mercado OR precios OR bolsa)"; break;
+        case "CLIMA": 
+          query = "(sequia OR lluvias OR pronostico OR clima) AND (Uruguay OR Argentina)"; break;
+        case "ECONOMÍA": 
+          query = "(dolar OR retenciones OR exportacion OR economia) AND agro"; break;
+        case "TECH": 
+          query = "(agrotech OR maquinaria OR drones OR riego)"; break;
+        default:
+          query = "agro mercado granos";
       }
     }
 
@@ -133,46 +144,65 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
         color: forestGreen,
         child: _isLoading 
           ? _buildShimmer()
-          : CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 25, 20, 10),
-                    child: Text(
-                      "NOTICIAS DESTACADAS",
-                      style: TextStyle(
-                        fontSize: 12, 
-                        fontWeight: FontWeight.bold, 
-                        color: Colors.grey, 
-                        letterSpacing: 1.2
+          : _articles.isEmpty 
+              ? _buildEmptyState(forestGreen) // Gestion du cas vide
+              : CustomScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  slivers: [
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(20, 25, 20, 10),
+                        child: Text(
+                          "NOTICIAS ACTUALIZADAS",
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final art = _articles[index];
-                        String title = art['title'].toString().toLowerCase();
-                        
-                        // Analyse des tendances (Prix)
-                        bool isUp = title.contains("sube") || title.contains("alza") || 
-                                   title.contains("récord") || title.contains("suba");
-                        bool isDown = title.contains("baja") || title.contains("cae") || 
-                                     title.contains("caída");
-
-                        return _buildPremiumCard(art, forestGreen, isUp, isDown);
-                      },
-                      childCount: _articles.length,
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final art = _articles[index];
+                            String title = art['title'].toString().toLowerCase();
+                            bool isUp = title.contains("sube") || title.contains("alza") || title.contains("suba");
+                            bool isDown = title.contains("baja") || title.contains("cae") || title.contains("caída");
+                            return _buildPremiumCard(art, forestGreen, isUp, isDown);
+                          },
+                          childCount: _articles.length,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 30)),
+                  ],
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 30)),
-              ],
+      ),
+    );
+  }
+
+  // WIDGET POUR LA PAGE VIDE
+  Widget _buildEmptyState(Color primary) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off_rounded, size: 80, color: Colors.grey[300]),
+            const SizedBox(height: 20),
+            const Text(
+              "No hay noticias recientes",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
             ),
+            const SizedBox(height: 10),
+            Text(
+              "No encontramos artículos para este rubro hoy. Intenta refrescar o cambiar de categoría.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -181,9 +211,9 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("NOTICIAS PROPRICE", 
+        Text("PROPRICE NEWS", 
           style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.white)),
-        Text("TEMAS AGRÍCOLAS", 
+        Text("MERCADO EN TIEMPO REAL", 
           style: TextStyle(fontSize: 9, color: Color(0xFF74C69D), fontWeight: FontWeight.bold, letterSpacing: 1.2)),
       ],
     );
@@ -204,12 +234,10 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
   }
 
   Widget _buildPremiumCard(dynamic art, Color primary, bool isUp, bool isDown) {
-    String time = "Hoy";
+    String time = "Reciente";
     try {
       time = DateFormat('dd MMM, HH:mm').format(DateTime.parse(art['publishedAt']));
-    } catch (e) {
-      time = "Reciente";
-    }
+    } catch (e) {}
 
     return GestureDetector(
       onTap: () {
@@ -223,13 +251,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04), 
-              blurRadius: 15, 
-              offset: const Offset(0, 8)
-            )
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 8))],
         ),
         child: Column(
           children: [
@@ -244,30 +266,19 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
                       child: Image.network(
                         art['urlToImage'] ?? '',
                         fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => Container(
-                          color: Colors.grey[100], 
-                          child: const Icon(Icons.image_not_supported, color: Colors.grey)
-                        ),
+                        errorBuilder: (c, e, s) => Container(color: Colors.grey[100], child: const Icon(Icons.image_not_supported, color: Colors.grey)),
                       ),
                     ),
                   ),
                 ),
-                // Badge Source
                 Positioned(
                   top: 16, left: 16,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7), 
-                      borderRadius: BorderRadius.circular(8)
-                    ),
-                    child: Text(
-                      art['source']?['name']?.toString().toUpperCase() ?? "NEWS", 
-                      style: const TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)
-                    ),
+                    decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(8)),
+                    child: Text(art['source']?['name']?.toString().toUpperCase() ?? "AGRO", style: const TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
                 ),
-                // Indicateur de tendance
                 if (isUp || isDown)
                   Positioned(
                     top: 16, right: 16,
@@ -295,17 +306,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    art['title'] ?? '', 
-                    style: TextStyle(
-                      color: primary, 
-                      fontWeight: FontWeight.w900, 
-                      fontSize: 17, 
-                      height: 1.3
-                    ), 
-                    maxLines: 3, 
-                    overflow: TextOverflow.ellipsis
-                  ),
+                  Text(art['title'] ?? '', style: TextStyle(color: primary, fontWeight: FontWeight.w900, fontSize: 17, height: 1.3), maxLines: 3, overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),
@@ -318,7 +319,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
   Widget _buildShimmer() {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: 4, 
+      itemCount: 3, 
       itemBuilder: (c,i) => Shimmer.fromColors(
         baseColor: Colors.grey[200]!,
         highlightColor: Colors.white,
