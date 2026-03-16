@@ -37,7 +37,6 @@ class _ProfilePageState extends State<ProfilePage> {
   final _firstNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _deptController = TextEditingController();
   final _addressController = TextEditingController();
   final _countryController = TextEditingController();
 
@@ -53,7 +52,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _firstNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _deptController.dispose();
     _addressController.dispose();
     _countryController.dispose();
     _addressFocusNode.dispose();
@@ -69,7 +67,6 @@ class _ProfilePageState extends State<ProfilePage> {
       _firstNameController.text = prefs.getString('first_name') ?? "Jean";
       _emailController.text = prefs.getString('email') ?? "jean.dupont@email.com";
       _passwordController.text = prefs.getString('password') ?? "password123";
-      _deptController.text = prefs.getString('dept') ?? "";
       _addressController.text = prefs.getString('address') ?? "";
       _countryController.text = prefs.getString('country') ?? "";
       
@@ -254,7 +251,6 @@ Future<List<String>> _searchAddress(String query) async {
       await prefs.setString('first_name', _firstNameController.text);
       await prefs.setString('email', _emailController.text);
       await prefs.setString('password', _passwordController.text);
-      await prefs.setString('dept', _deptController.text);
       await prefs.setString('address', _addressController.text);
       await prefs.setString('country', _countryController.text);
       
@@ -331,7 +327,16 @@ Future<List<String>> _searchAddress(String query) async {
               physics: const BouncingScrollPhysics(),
               child: Form(
                 key: _formKey,
-                onChanged: () => setState(() => _hasChanges = true),
+                onChanged: () {
+                  if (!_hasChanges) {
+                    // On attend la fin de la construction de la frame actuelle
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        setState(() => _hasChanges = true);
+                      }
+                    });
+                  }
+                },          
                 child: Column(
                   children: [
                     const SizedBox(height: 10),
@@ -374,11 +379,6 @@ Future<List<String>> _searchAddress(String query) async {
                           ),
                           const SizedBox(height: 25),
                           _buildSectionLabel("LOCALIZACIÓN"),
-                          _buildInput(
-                            icon: Icons.map_outlined, 
-                            hint: "Departamento", 
-                            controller: _deptController,
-                          ),
                           _buildAddressAutocomplete(forestGreen),
                           _buildCountryAutocomplete(forestGreen),
                         ],
@@ -461,16 +461,19 @@ Widget _buildAddressAutocomplete(Color forestGreen) {
     decoration: BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(18),
-      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.02),
+          blurRadius: 10,
+        )
+      ],
     ),
     child: TypeAheadField<String>(
-      // On garde les options de base qui fonctionnent
       hideOnSelect: true,
       hideOnEmpty: true,
       debounceDuration: const Duration(milliseconds: 300),
       
       suggestionsCallback: (pattern) async {
-        // On ne cherche que si l'utilisateur tape vraiment (plus de 2 caractères)
         if (pattern.length < 3 || _isSelectingAddress) return null;
         return await _searchAddress(pattern);
       },
@@ -484,28 +487,78 @@ Widget _buildAddressAutocomplete(Color forestGreen) {
 
       onSelected: (suggestion) {
         setState(() {
-          _isSelectingAddress = true; // On bloque les suggestions
+          _isSelectingAddress = true;
           _addressController.text = suggestion;
           _hasChanges = true;
-        });
 
-        // L'ASTUCE : On retire le focus globalement
-        FocusManager.instance.primaryFocus?.unfocus();
+          // --- LOGIQUE DE TRADUCTION ET CORRESPONDANCE ---
+          List<String> parts = suggestion.split(',');
+          if (parts.length > 1) {
+            String rawCountry = parts.last.trim();
+            
+            Map<String, String> translationMap = {
+              "Argentina": "Argentina",
+              "Bolivia": "Bolivia",
+              "Brazil": "Brasil",
+              "Chile": "Chile",
+              "Colombia": "Colombia",
+              "Ecuador": "Ecuador",
+              "Guyana": "Guyana",
+              "Paraguay": "Paraguay",
+              "Peru": "Perú",
+              "Suriname": "Suriname",
+              "Uruguay": "Uruguay",
+              "Venezuela": "Venezuela",
+              "French Guiana": "Francia",
+              "Costa Rica": "Costa Rica",
+              "Cuba": "Cuba",
+              "El Salvador": "El Salvador",
+              "Guatemala": "Guatemala",
+              "Honduras": "Honduras",
+              "Nicaragua": "Nicaragua",
+              "Panama": "Panamá",
+              "Puerto Rico": "Puerto Rico",
+              "Dominican Republic": "República Dominicana",
+              "United States": "Estados Unidos",
+              "USA": "Estados Unidos",
+              "United Kingdom": "Reino Unido",
+              "UK": "Reino Unido",
+              "France": "Francia",
+              "Germany": "Alemania",
+              "Italy": "Italia",
+              "Spain": "España",
+              "China": "China",
+              "Japan": "Japón",
+              "Russia": "Rusia",
+              "Canada": "Canadá",
+              "Mexico": "México",
+            };
 
-        // On attend que l'UI respire, puis on libère le verrou
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            setState(() {
-              _isSelectingAddress = false;
-            });
+            String countryToLookFor = translationMap[rawCountry] ?? rawCountry;
+
+            if (_paisesOptions.any((p) => p.toLowerCase() == countryToLookFor.toLowerCase())) {
+              _countryController.text = _paisesOptions.firstWhere(
+                (p) => p.toLowerCase() == countryToLookFor.toLowerCase()
+              );
+            }
           }
         });
-      },
+
+        FocusManager.instance.primaryFocus?.unfocus();
+
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            setState(() => _isSelectingAddress = false);
+          }
+        });
+      }, // Fin de onSelected (une seule fois !)
 
       builder: (context, controller, focusNode) {
-        // IMPORTANT: On synchronise le controller interne avec notre controller global
+        // Synchronisation du controller
         if (controller.text != _addressController.text) {
-          controller.text = _addressController.text;
+          Future.microtask(() {
+            controller.text = _addressController.text;
+          });
         }
 
         return TextField(
@@ -519,10 +572,9 @@ Widget _buildAddressAutocomplete(Color forestGreen) {
             border: InputBorder.none,
           ),
           onChanged: (value) {
-            // Si l'utilisateur efface ou change manuellement, on réactive tout
             if (_isSelectingAddress) _isSelectingAddress = false;
             _addressController.text = value;
-            _hasChanges = true;
+            // _hasChanges est géré par le Form.onChanged
           },
         );
       },
@@ -530,54 +582,72 @@ Widget _buildAddressAutocomplete(Color forestGreen) {
   );
 }
 
-  Widget _buildCountryAutocomplete(Color forestGreen) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
-      ),
-      child: Autocomplete<String>(
-        optionsBuilder: (TextEditingValue textValue) {
-          if (textValue.text == '') return const Iterable<String>.empty();
-          return _paisesOptions.where((String option) =>
-              option.toLowerCase().contains(textValue.text.toLowerCase()));
-        },
-        onSelected: (String selection) {
-          setState(() {
-            _countryController.text = selection;
-            _hasChanges = true;
+ Widget _buildCountryAutocomplete(Color forestGreen) {
+  return Container(
+    margin: const EdgeInsets.symmetric(vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 18),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.02),
+          blurRadius: 10,
+        )
+      ],
+    ),
+    child: Autocomplete<String>(
+      optionsBuilder: (TextEditingValue textValue) {
+        if (textValue.text == '') return const Iterable<String>.empty();
+        return _paisesOptions.where((String option) =>
+            option.toLowerCase().contains(textValue.text.toLowerCase()));
+      },
+      onSelected: (String selection) {
+        setState(() {
+          _countryController.text = selection;
+          _hasChanges = true;
+        });
+        FocusScope.of(context).unfocus();
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return _buildOptionsDropdown(context, onSelected, options);
+      },
+      fieldViewBuilder: (context, fieldController, focusNode, onFieldSubmitted) {
+        // Synchronisation sécurisée du texte venant de la localisation
+        if (_countryController.text.isNotEmpty && fieldController.text.isEmpty) {
+          Future.microtask(() {
+            if (context.mounted) {
+              fieldController.text = _countryController.text;
+            }
           });
-          FocusScope.of(context).unfocus();
-        },
-        optionsViewBuilder: (context, onSelected, options) {
-          return _buildOptionsDropdown(context, onSelected, options);
-        },
-        fieldViewBuilder: (context, fieldController, focusNode, onFieldSubmitted) {
-          if (_countryController.text.isNotEmpty && fieldController.text.isEmpty) {
-            fieldController.text = _countryController.text;
-          }
-          return TextFormField(
-            controller: fieldController,
-            focusNode: focusNode,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: "País",
-              hintStyle: TextStyle(color: Colors.grey.withValues(alpha: 0.4), fontSize: 13),
-              icon: Icon(Icons.public_rounded, color: forestGreen.withValues(alpha: 0.6), size: 20),
-              border: InputBorder.none,
+        }
+
+        return TextFormField(
+          controller: fieldController,
+          focusNode: focusNode,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          decoration: InputDecoration(
+            hintText: "País",
+            hintStyle: TextStyle(
+              color: Colors.grey.withValues(alpha: 0.4),
+              fontSize: 13,
             ),
-            onChanged: (value) {
-              _countryController.text = value;
-              _hasChanges = true;
-            },
-          );
-        },
-      ),
-    );
-  }
+            icon: Icon(
+              Icons.public_rounded,
+              color: forestGreen.withValues(alpha: 0.6),
+              size: 20,
+            ),
+            border: InputBorder.none,
+          ),
+          onChanged: (value) {
+            _countryController.text = value;
+            // Pas de setState ici, le onChanged du Form parent gère le _hasChanges
+          },
+        );
+      },
+    ),
+  );
+}
 
   Widget _buildOptionsDropdown(BuildContext context, Function(String) onSelected, Iterable<String> options) {
     return Align(
