@@ -174,20 +174,31 @@ class _ProfilePageState extends State<ProfilePage> {
   // --- APPEL API ADRESSE ---
 
 Future<List<String>> _searchAddress(String query) async {
-  if (query.length < 3) return [];
-  
-  final url = Uri.parse('https://photon.komoot.io/api/?q=${Uri.encodeComponent(query)}&limit=5');
-  
+  // 1. Protection contre les requêtes vides ou trop courtes
+  final cleanQuery = query.trim();
+  if (cleanQuery.length < 3) return [];
+
+  // 2. Construction de l'URL
+  // Note : J'ai retiré le 'bbox' pour que tu ne sois pas bloqué sur l'Uruguay,
+  // mais j'ai ajouté lat/lon pour donner la priorité aux résultats proches.
+  final url = Uri.parse(
+    'https://photon.komoot.io/api/?q=${Uri.encodeComponent(cleanQuery)}'
+    '&limit=15'
+    '&lang=en'
+    '&lat=-34.85&lon=-56.17' // Priorité autour de Montevideo
+  );
+
   try {
-    // AJOUT DES HEADERS POUR ÉVITER LE 403
     final response = await http.get(
       url,
       headers: {
-        'User-Agent': 'ProPriceApp/1.0 (contact@votre-email.com)', // Change l'email si tu veux
+        'User-Agent': 'ProPriceApp/1.0',
         'Accept': 'application/json',
       },
     ).timeout(const Duration(seconds: 5));
-    
+
+    debugPrint("STATUS: ${response.statusCode}");
+
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
       final List features = data['features'] ?? [];
@@ -200,31 +211,35 @@ Future<List<String>> _searchAddress(String query) async {
         String name = p['name']?.toString() ?? "";
         String street = p['street']?.toString() ?? "";
         String city = p['city']?.toString() ?? p['state']?.toString() ?? "";
+        String house = p['housenumber']?.toString() ?? "";
         String country = p['country']?.toString() ?? "";
         
         List<String> parts = [];
-        if (street.isNotEmpty) {
-          String house = p['housenumber']?.toString() ?? "";
+        
+        // Construction de l'adresse
+        if (name.isNotEmpty) parts.add(name);
+        
+        if (street.isNotEmpty && street.toLowerCase() != name.toLowerCase()) {
           parts.add(house.isNotEmpty ? "$street $house" : street);
-        } else if (name.isNotEmpty) {
-          parts.add(name);
         }
         
         if (city.isNotEmpty) parts.add(city);
         if (country.isNotEmpty) parts.add(country);
 
         String finalString = parts.join(", ");
-        if (finalString.isNotEmpty) results.add(finalString);
+        if (finalString.isNotEmpty) {
+          results.add(finalString);
+        }
       }
-      return results;
+      return results; // Retourne la liste remplie
     } else {
-      // Si on a encore une erreur, on l'affiche pour savoir
-      debugPrint("ERREUR API ${response.statusCode}: ${response.body}");
+      debugPrint("ERREUR API: ${response.statusCode}");
     }
   } catch (e) {
     debugPrint("ERREUR RÉSEAU: $e");
   }
-  return [];
+  
+  return []; // Retourne une liste vide en cas d'erreur ou pas de résultats
 }
 
   // --- LOGIQUE DE SAUVEGARDE ---
