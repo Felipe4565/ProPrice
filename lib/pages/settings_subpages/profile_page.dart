@@ -612,15 +612,15 @@ Widget _buildAddressAutocomplete(Color forestGreen) {
       optionsViewBuilder: (context, onSelected, options) {
         return _buildOptionsDropdown(context, onSelected, options);
       },
-      fieldViewBuilder: (context, fieldController, focusNode, onFieldSubmitted) {
-        // Synchronisation sécurisée du texte venant de la localisation
-        if (_countryController.text.isNotEmpty && fieldController.text.isEmpty) {
-          Future.microtask(() {
-            if (context.mounted) {
-              fieldController.text = _countryController.text;
-            }
-          });
-        }
+  fieldViewBuilder: (context, fieldController, focusNode, onFieldSubmitted) {
+  // On synchronise dès que les textes sont différents (même si pas vide)
+  if (fieldController.text != _countryController.text) {
+    Future.microtask(() {
+      if (context.mounted) {
+        fieldController.text = _countryController.text;
+      }
+    });
+  }
 
         return TextFormField(
           controller: fieldController,
