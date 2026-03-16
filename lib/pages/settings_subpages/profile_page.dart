@@ -1,8 +1,12 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_typeahead/flutter_typeahead.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -13,10 +17,12 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final _formKey = GlobalKey<FormState>();
+  final FocusNode _addressFocusNode = FocusNode();
   bool _isSaving = false;
   bool _obscurePassword = true;
   bool _hasChanges = false;
-
+  bool _isSelectingAddress = false;
+  
   File? _imageFile;
   final ImagePicker _picker = ImagePicker();
 
@@ -50,6 +56,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _deptController.dispose();
     _addressController.dispose();
     _countryController.dispose();
+    _addressFocusNode.dispose();
     super.dispose();
   }
 
@@ -167,6 +174,62 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  // --- APPEL API ADRESSE ---
+
+Future<List<String>> _searchAddress(String query) async {
+  if (query.length < 3) return [];
+  
+  final url = Uri.parse('https://photon.komoot.io/api/?q=${Uri.encodeComponent(query)}&limit=5');
+  
+  try {
+    // AJOUT DES HEADERS POUR ÉVITER LE 403
+    final response = await http.get(
+      url,
+      headers: {
+        'User-Agent': 'ProPriceApp/1.0 (contact@votre-email.com)', // Change l'email si tu veux
+        'Accept': 'application/json',
+      },
+    ).timeout(const Duration(seconds: 5));
+    
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final List features = data['features'] ?? [];
+      
+      List<String> results = [];
+      for (var f in features) {
+        final p = f['properties'];
+        if (p == null) continue;
+
+        String name = p['name']?.toString() ?? "";
+        String street = p['street']?.toString() ?? "";
+        String city = p['city']?.toString() ?? p['state']?.toString() ?? "";
+        String country = p['country']?.toString() ?? "";
+        
+        List<String> parts = [];
+        if (street.isNotEmpty) {
+          String house = p['housenumber']?.toString() ?? "";
+          parts.add(house.isNotEmpty ? "$street $house" : street);
+        } else if (name.isNotEmpty) {
+          parts.add(name);
+        }
+        
+        if (city.isNotEmpty) parts.add(city);
+        if (country.isNotEmpty) parts.add(country);
+
+        String finalString = parts.join(", ");
+        if (finalString.isNotEmpty) results.add(finalString);
+      }
+      return results;
+    } else {
+      // Si on a encore une erreur, on l'affiche pour savoir
+      debugPrint("ERREUR API ${response.statusCode}: ${response.body}");
+    }
+  } catch (e) {
+    debugPrint("ERREUR RÉSEAU: $e");
+  }
+  return [];
+}
+
   // --- LOGIQUE DE SAUVEGARDE ---
 
   Future<void> _handleUpdate() async {
@@ -268,7 +331,7 @@ class _ProfilePageState extends State<ProfilePage> {
               physics: const BouncingScrollPhysics(),
               child: Form(
                 key: _formKey,
-                onChanged: () => _hasChanges = true,
+                onChanged: () => setState(() => _hasChanges = true),
                 child: Column(
                   children: [
                     const SizedBox(height: 10),
@@ -293,7 +356,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             icon: Icons.person_outline,
                             hint: "Nombre",
                             controller: _firstNameController,
-                            validator: (v) => v!.isEmpty ? "Campo obligatoire" : null,
+                            validator: (v) => v!.isEmpty ? "Campo obligatorio" : null,
                           ),
                           _buildInput(
                             icon: Icons.alternate_email,
@@ -316,11 +379,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             hint: "Departamento", 
                             controller: _deptController,
                           ),
-                          _buildInput(
-                            icon: Icons.home_outlined, 
-                            hint: "Dirección", 
-                            controller: _addressController,
-                          ),
+                          _buildAddressAutocomplete(forestGreen),
                           _buildCountryAutocomplete(forestGreen),
                         ],
                       ),
@@ -346,7 +405,7 @@ class _ProfilePageState extends State<ProfilePage> {
       child: Text(
         label,
         style: TextStyle(
-          color: const Color(0xFF1B4332).withOpacity(0.4), 
+          color: const Color(0xFF1B4332).withValues(alpha: 0.4), 
           fontSize: 10, 
           fontWeight: FontWeight.w900, 
           letterSpacing: 1.8,
@@ -368,13 +427,11 @@ class _ProfilePageState extends State<ProfilePage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 18),
-        leading: Icon(icon, color: const Color(0xFF1B4332).withOpacity(0.6), size: 20),
+        leading: Icon(icon, color: const Color(0xFF1B4332).withValues(alpha: 0.6), size: 20),
         title: TextFormField(
           controller: controller,
           obscureText: isPassword ? _obscurePassword : false,
@@ -383,7 +440,7 @@ class _ProfilePageState extends State<ProfilePage> {
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey.withOpacity(0.4), fontSize: 13),
+            hintStyle: TextStyle(color: Colors.grey.withValues(alpha: 0.4), fontSize: 13),
             border: InputBorder.none,
             suffixIcon: isPassword 
               ? IconButton(
@@ -397,15 +454,90 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+Widget _buildAddressAutocomplete(Color forestGreen) {
+  return Container(
+    margin: const EdgeInsets.symmetric(vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 18),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
+    ),
+    child: TypeAheadField<String>(
+      // On garde les options de base qui fonctionnent
+      hideOnSelect: true,
+      hideOnEmpty: true,
+      debounceDuration: const Duration(milliseconds: 300),
+      
+      suggestionsCallback: (pattern) async {
+        // On ne cherche que si l'utilisateur tape vraiment (plus de 2 caractères)
+        if (pattern.length < 3 || _isSelectingAddress) return null;
+        return await _searchAddress(pattern);
+      },
+
+      itemBuilder: (context, suggestion) {
+        return ListTile(
+          leading: const Icon(Icons.location_on_outlined, size: 18, color: Color(0xFF1B4332)),
+          title: Text(suggestion, style: const TextStyle(fontSize: 13)),
+        );
+      },
+
+      onSelected: (suggestion) {
+        setState(() {
+          _isSelectingAddress = true; // On bloque les suggestions
+          _addressController.text = suggestion;
+          _hasChanges = true;
+        });
+
+        // L'ASTUCE : On retire le focus globalement
+        FocusManager.instance.primaryFocus?.unfocus();
+
+        // On attend que l'UI respire, puis on libère le verrou
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            setState(() {
+              _isSelectingAddress = false;
+            });
+          }
+        });
+      },
+
+      builder: (context, controller, focusNode) {
+        // IMPORTANT: On synchronise le controller interne avec notre controller global
+        if (controller.text != _addressController.text) {
+          controller.text = _addressController.text;
+        }
+
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          decoration: InputDecoration(
+            hintText: "Dirección",
+            hintStyle: TextStyle(color: Colors.grey.withValues(alpha: 0.4), fontSize: 13),
+            icon: Icon(Icons.home_outlined, color: forestGreen.withValues(alpha: 0.6), size: 20),
+            border: InputBorder.none,
+          ),
+          onChanged: (value) {
+            // Si l'utilisateur efface ou change manuellement, on réactive tout
+            if (_isSelectingAddress) _isSelectingAddress = false;
+            _addressController.text = value;
+            _hasChanges = true;
+          },
+        );
+      },
+    ),
+  );
+}
+
   Widget _buildCountryAutocomplete(Color forestGreen) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10)],
       ),
       child: Autocomplete<String>(
         optionsBuilder: (TextEditingValue textValue) {
@@ -414,64 +546,64 @@ class _ProfilePageState extends State<ProfilePage> {
               option.toLowerCase().contains(textValue.text.toLowerCase()));
         },
         onSelected: (String selection) {
-          _countryController.text = selection;
-          _hasChanges = true;
+          setState(() {
+            _countryController.text = selection;
+            _hasChanges = true;
+          });
           FocusScope.of(context).unfocus();
         },
         optionsViewBuilder: (context, onSelected, options) {
-          return Align(
-            alignment: Alignment.topLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Material(
-                elevation: 4,
-                borderRadius: BorderRadius.circular(18),
-                color: Colors.white,
-                child: Container(
-                  width: MediaQuery.of(context).size.width - 50,
-                  constraints: const BoxConstraints(maxHeight: 250),
-                  child: ListView.separated(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    separatorBuilder: (context, index) => Divider(color: Colors.grey.withOpacity(0.1), height: 1),
-                    itemBuilder: (BuildContext context, int index) {
-                      final String option = options.elementAt(index);
-                      return ListTile(
-                        leading: const Icon(Icons.location_on_outlined, size: 18),
-                        title: Text(option, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1B4332))),
-                        onTap: () => onSelected(option),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-          );
+          return _buildOptionsDropdown(context, onSelected, options);
         },
         fieldViewBuilder: (context, fieldController, focusNode, onFieldSubmitted) {
           if (_countryController.text.isNotEmpty && fieldController.text.isEmpty) {
             fieldController.text = _countryController.text;
           }
-          return ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 18),
-            leading: Icon(Icons.public_rounded, color: forestGreen.withOpacity(0.6), size: 20),
-            title: TextField(
-              controller: fieldController,
-              focusNode: focusNode,
-              onChanged: (value) {
-                _countryController.text = value;
-                _hasChanges = true;
-              },
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: "País",
-                hintStyle: TextStyle(color: Colors.grey.withOpacity(0.4), fontSize: 13),
-                border: InputBorder.none,
-              ),
+          return TextFormField(
+            controller: fieldController,
+            focusNode: focusNode,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: "País",
+              hintStyle: TextStyle(color: Colors.grey.withValues(alpha: 0.4), fontSize: 13),
+              icon: Icon(Icons.public_rounded, color: forestGreen.withValues(alpha: 0.6), size: 20),
+              border: InputBorder.none,
             ),
+            onChanged: (value) {
+              _countryController.text = value;
+              _hasChanges = true;
+            },
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildOptionsDropdown(BuildContext context, Function(String) onSelected, Iterable<String> options) {
+    return Align(
+      alignment: Alignment.topLeft,
+      child: Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(18),
+        color: Colors.white,
+        child: Container(
+          width: MediaQuery.of(context).size.width - 50,
+          constraints: const BoxConstraints(maxHeight: 250),
+          child: ListView.separated(
+            padding: EdgeInsets.zero,
+            shrinkWrap: true,
+            itemCount: options.length,
+            separatorBuilder: (context, index) => Divider(color: Colors.grey.withValues(alpha: 0.1), height: 1),
+            itemBuilder: (BuildContext context, int index) {
+              final String option = options.elementAt(index);
+              return ListTile(
+                leading: const Icon(Icons.location_on_outlined, size: 18, color: Color(0xFF1B4332)),
+                title: Text(option, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1B4332))),
+                onTap: () => onSelected(option),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -485,7 +617,7 @@ class _ProfilePageState extends State<ProfilePage> {
             width: 120, height: 120,
             decoration: BoxDecoration(
               shape: BoxShape.circle, color: Colors.white,
-              boxShadow: [BoxShadow(color: forestGreen.withOpacity(0.1), blurRadius: 20, spreadRadius: 2)],
+              boxShadow: [BoxShadow(color: forestGreen.withValues(alpha: 0.1), blurRadius: 20, spreadRadius: 2)],
             ),
           ),
           CircleAvatar(
