@@ -12,7 +12,8 @@ class SecurityPage extends StatelessWidget {
         elevation: 0,
         title: const Text(
           "SEGURIDAD Y PRIVACIDAD",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          style: TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
@@ -22,22 +23,31 @@ class SecurityPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _buildSectionTitle("Cuenta"),
+          _buildSecurityItem(
+            icon: Icons.email_outlined,
+            title: "Modificar Email",
+            subtitle: "jean.dupont@email.com", // À remplacer par l'email réel
+            onTap: () => _showEditEmailDialog(context),
+          ),
+          
+          const SizedBox(height: 24),
           _buildSectionTitle("Acceso"),
           _buildSecurityItem(
             icon: Icons.lock_outline,
             title: "Cambiar contraseña",
             subtitle: "Actualiza tu clave regularmente",
-            onTap: () {
-              // Action pour changer le MDP
-            },
+            onTap: () => _showChangePasswordDialog(context), 
           ),
           _buildSecurityItem(
             icon: Icons.fingerprint,
             title: "Biometría",
             subtitle: "Huella digital o Face ID",
             isSwitch: true,
-            switchValue: true, // À lier avec une variable d'état
-            onChanged: (val) {},
+            switchValue: true, 
+            onChanged: (val) {
+              // Logique pour activer/désactiver la biométrie
+            },
           ),
           
           const SizedBox(height: 24),
@@ -48,12 +58,16 @@ class SecurityPage extends StatelessWidget {
             subtitle: "Permitir que otros vean mi actividad",
             isSwitch: true,
             switchValue: false,
-            onChanged: (val) {},
+            onChanged: (val) {
+              // Logique pour le profil public
+            },
           ),
           _buildSecurityItem(
             icon: Icons.description_outlined,
             title: "Términos y condiciones",
-            onTap: () {},
+            onTap: () {
+              // Action pour ouvrir les conditions
+            },
           ),
 
           const SizedBox(height: 40),
@@ -104,7 +118,9 @@ class SecurityPage extends StatelessWidget {
           child: Icon(icon, color: const Color(0xFF1B4332)),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: subtitle != null ? Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[600])) : null,
+        subtitle: subtitle != null 
+            ? Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[600])) 
+            : null,
         trailing: isSwitch 
           ? Switch(
               value: switchValue, 
@@ -124,21 +140,254 @@ class SecurityPage extends StatelessWidget {
       children: [
         const Padding(
           padding: EdgeInsets.only(left: 8, bottom: 8),
-          child: Text("ZONA PELIGROSA", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)),
+          child: Text(
+            "ZONA PELIGROSA", 
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)
+          ),
         ),
         Card(
           elevation: 0,
           color: const Color(0xFFFFEBEE),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Colors.redAccent, width: 0.5)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12), 
+            side: const BorderSide(color: Colors.redAccent, width: 0.5)
+          ),
           child: ListTile(
             leading: const Icon(Icons.delete_forever, color: Colors.red),
-            title: const Text("Eliminar cuenta", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            title: const Text(
+              "Eliminar cuenta", 
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)
+            ),
             onTap: () {
-              // Afficher un dialogue de confirmation
+              // Logique de confirmation de suppression
             },
           ),
         ),
       ],
     );
   }
+
+  // Dialogue de modification d'email
+  // Dialogue de modification d'email avec option mot de passe oublié
+void _showEditEmailDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF2EFE9),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Modificar Email",
+          style: TextStyle(color: Color(0xFF1B4332), fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Introduce tu nuevo email y confirma con tu contraseña actual.",
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: "Nuevo Email",
+                prefixIcon: const Icon(Icons.email_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: "Contraseña actual",
+                prefixIcon: const Icon(Icons.lock_outline),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () {
+                  // On ferme d'abord le dialogue de modification d'email
+                  Navigator.pop(context);
+                  // On ouvre le dialogue de récupération
+                  _showForgotPasswordConfirmation(context);
+                },
+                child: const Text(
+                  "¿Olvidaste tu contraseña?",
+                  style: TextStyle(
+                    color: Color(0xFF1B4332),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCELAR", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B4332),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              // Logique de mise à jour de l'email ici
+              Navigator.pop(context);
+            },
+            child: const Text("ACTUALIZAR", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- NOUVELLE FONCTION POUR L'ENVOI DE L'EMAIL ---
+  void _showForgotPasswordConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF2EFE9),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Restablecer contraseña",
+          style: TextStyle(color: Color(0xFF1B4332), fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          "Enviaremos un enlace de recuperación a tu dirección de correo electrónico actual para que puedas crear una nueva contraseña.",
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCELAR", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B4332),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              // ICI : Appelle ta fonction Firebase ou API pour envoyer le mail
+              // Exemple : await FirebaseAuth.instance.sendPasswordResetEmail(email: userEmail);
+              
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Email de recuperación enviado con éxito"),
+                  backgroundColor: Color(0xFF1B4332),
+                ),
+              );
+            },
+            child: const Text("ENVIAR EMAIL", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showChangePasswordDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF2EFE9),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Cambiar contraseña",
+          style: TextStyle(color: Color(0xFF1B4332), fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Ingresa tu clave actual y la nueva para actualizarla.",
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: "Contraseña actual",
+                  prefixIcon: const Icon(Icons.lock_open),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              
+              // --- LIEN MOT DE PASSE OUBLIÉ ---
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Ferme le dialogue actuel
+                    _showForgotPasswordConfirmation(context); // Ouvre la confirmation d'envoi d'email
+                  },
+                  child: const Text(
+                    "¿Olvidaste tu contraseña?",
+                    style: TextStyle(
+                      color: Color(0xFF1B4332),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ),
+              
+              const SizedBox(height: 8),
+              TextField(
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: "Nueva contraseña",
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: "Confirmar nueva contraseña",
+                  prefixIcon: const Icon(Icons.check_circle_outline),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCELAR", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1B4332),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              // Logique de validation (vérifier si les deux nouveaux MDP sont identiques)
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Contraseña actualizada con éxito"),
+                  backgroundColor: Color(0xFF1B4332),
+                ),
+              );
+            },
+            child: const Text("GUARDAR", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  
 }
