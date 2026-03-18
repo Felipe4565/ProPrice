@@ -6,9 +6,8 @@ plugins {
 
 android {
     namespace = "com.example.proprice"
-    compileSdk = flutter.compileSdkVersion
-    
-    //ndkVersion = "28.2.13676358"
+    // On fixe ici pour être sûr de la compatibilité avec les librairies récentes
+    compileSdk = 35 
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -22,7 +21,8 @@ android {
     defaultConfig {
         applicationId = "com.example.proprice"
         
-        // Utilise la version par défaut de Flutter ou fixe-la à 21 si besoin
+        // --- MODIFICATION CRUCIALE ICI ---
+        // On remplace 'flutter.minSdkVersion' par 21 (requis pour la biométrie)
         minSdk = flutter.minSdkVersion 
         
         targetSdk = flutter.targetSdkVersion
@@ -32,7 +32,6 @@ android {
 
     buildTypes {
         release {
-            // Note : En production, tu utiliseras une config de signature spécifique
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -40,4 +39,17 @@ android {
 
 flutter {
     source = "../.."
+}
+
+configurations.all {
+    resolutionStrategy {
+
+        force("androidx.core:core:1.13.1")
+        force("androidx.core:core-ktx:1.13.1")
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core:1.13.1")
+    implementation("androidx.core:core-ktx:1.13.1")
 }

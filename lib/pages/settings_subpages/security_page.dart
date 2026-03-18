@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:local_auth/local_auth.dart';
 
-class SecurityPage extends StatelessWidget {
+class SecurityPage extends StatefulWidget {
   const SecurityPage({super.key});
+
+  @override
+  State<SecurityPage> createState() => _SecurityPageState();
+}
+
+class _SecurityPageState extends State<SecurityPage> {
+  final LocalAuthentication auth = LocalAuthentication();
+  bool _isBiometricEnabled = false; // Valeur initiale
 
   @override
   Widget build(BuildContext context) {
@@ -44,10 +53,8 @@ class SecurityPage extends StatelessWidget {
             title: "Biometría",
             subtitle: "Huella digital o Face ID",
             isSwitch: true,
-            switchValue: true, 
-            onChanged: (val) {
-              // Logique pour activer/désactiver la biométrie
-            },
+            switchValue: _isBiometricEnabled, // CHANGE : utilise la variable au lieu de 'true'
+            onChanged: (val) => _handleBiometricToggle(val), // CHANGE : appelle la fonction
           ),
           
           const SizedBox(height: 24),
@@ -389,5 +396,28 @@ void _showEditEmailDialog(BuildContext context) {
     );
   }
 
-  
+  Future<void> _handleBiometricToggle(bool targetValue) async {
+    if (!targetValue) {
+      setState(() => _isBiometricEnabled = false);
+      return;
+    }
+
+    try {
+      final bool canAuthenticate = await auth.canCheckBiometrics || await auth.isDeviceSupported();
+      
+      if (!canAuthenticate) return;
+
+
+      final bool didAuthenticate = await auth.authenticate(
+        localizedReason: 'Confirma tu identidad para activar la biometría',
+      );
+
+      if (didAuthenticate) {
+        setState(() => _isBiometricEnabled = true);
+      }
+    } catch (e) {
+      debugPrint("Error biometría: $e");
+    }
+  }
+
 }
