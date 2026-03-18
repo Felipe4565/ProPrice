@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SecurityPage extends StatefulWidget {
   const SecurityPage({super.key});
@@ -397,16 +398,17 @@ void _showEditEmailDialog(BuildContext context) {
   }
 
   Future<void> _handleBiometricToggle(bool targetValue) async {
+    final prefs = await SharedPreferences.getInstance();
+
     if (!targetValue) {
       setState(() => _isBiometricEnabled = false);
+      await prefs.setBool('bio_enabled', false); // Sauvegarde locale
       return;
     }
 
     try {
       final bool canAuthenticate = await auth.canCheckBiometrics || await auth.isDeviceSupported();
-      
       if (!canAuthenticate) return;
-
 
       final bool didAuthenticate = await auth.authenticate(
         localizedReason: 'Confirma tu identidad para activar la biometría',
@@ -414,10 +416,27 @@ void _showEditEmailDialog(BuildContext context) {
 
       if (didAuthenticate) {
         setState(() => _isBiometricEnabled = true);
+        await prefs.setBool('bio_enabled', true); // Sauvegarde locale après succès
       }
     } catch (e) {
-      debugPrint("Error biometría: $e");
+      debugPrint("Error: $e");
     }
   }
+
+    @override
+  void initState() {
+    super.initState();
+    _loadBiometricSettings();
+  }
+
+  // Fonction pour lire la mémoire du téléphone
+  Future<void> _loadBiometricSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      // Si 'bio_enabled' n'existe pas encore, on met false par défaut
+      _isBiometricEnabled = prefs.getBool('bio_enabled') ?? false;
+    });
+  }
+
 
 }
