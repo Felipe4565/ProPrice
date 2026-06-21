@@ -1,9 +1,18 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:proprice/providers/app_settings.dart';
+import 'package:proprice/providers/user_data_provider.dart';
+import 'package:proprice/services/auth_lock.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:math';
-import 'news_page.dart'; 
-import 'settings_page.dart'; 
+
+import '../services/biometric_service.dart';
+import 'news_page.dart';
+import 'profile_page.dart';
+import 'settings_page.dart';
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -11,67 +20,107 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
-  int _selectedIndex = 0; 
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
+  int _selectedIndex = 0;
   String selectedGrain = "TRIGO";
-  bool _isLoading = true;
 
-  final List<Map<String, dynamic>> grainsData = [
-    {"name": "TRIGO", "emoji": "🌾", "price": "515.00", "variation": "+4.09%", "isFav": false, "order": 0},
-    {"name": "SOJA", "emoji": "🌱", "price": "420.50", "variation": "-1.20%", "isFav": false, "order": 1},
-    {"name": "MAIZ", "emoji": "🌽", "price": "185.00", "variation": "+0.50%", "isFav": false, "order": 2},
-    {"name": "CANOLA", "emoji": "🌿", "price": "610.00", "variation": "+2.15%", "isFav": false, "order": 3},
-    {"name": "GIRASOL", "emoji": "🌻", "price": "390.00", "variation": "-0.75%", "isFav": false, "order": 4},
-    {"name": "CEBADA", "emoji": "🪴", "price": "210.00", "variation": "+1.10%", "isFav": false, "order": 5},
-    {"name": "ARROZ", "emoji": "🍚", "price": "12.40", "variation": "+0.25%", "isFav": false, "order": 6},
-  ];
+
+  final BiometricService _biometricService = BiometricService();
+
 
   @override
   void initState() {
     super.initState();
-    _loadFavorites();
-  }
+    WidgetsBinding.instance.addObserver(this);
 
-  Future<void> _loadFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
-    final List<String> savedFavs = prefs.getStringList('favorites') ?? [];
-    setState(() {
-      for (var grain in grainsData) {
-        if (savedFavs.contains(grain['name'])) {
-          grain['isFav'] = true;
-        }
-      }
-      _isLoading = false;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _authenticateOnStart();
     });
   }
 
-  Future<void> _saveFavorites() async {
-    final prefs = await SharedPreferences.getInstance();
-    final List<String> favList = grainsData
-        .where((g) => g['isFav'] == true)
-        .map((g) => g['name'] as String)
-        .toList();
-    await prefs.setStringList('favorites', favList);
+  Future<void> _authenticateOnStart() async {
+  final prefs = await SharedPreferences.getInstance();
+  final bool isBioEnabled = prefs.getBool('bio_enabled') ?? false;
+
+  if (!isBioEnabled) return;
+
+  // évite double appel si déjà auth rapide
+  if (AuthLock.isAuthenticating) return;
+  if (AuthLock.lastSuccess != null &&
+      DateTime.now().difference(AuthLock.lastSuccess!).inSeconds < 4) {
+    return;
   }
+
+  await _authenticate();
+}
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Si l'application revient au premier plan
+    if (state == AppLifecycleState.resumed) {
+      _checkBiometricOnResume();
+    }
+  }
+
+  Future<void> _checkBiometricOnResume() async {
+    final prefs = await SharedPreferences.getInstance();
+    final bool isBioEnabled = prefs.getBool('bio_enabled') ?? false;
+
+    if (!isBioEnabled) return;
+
+    final now = DateTime.now();
+
+    if (AuthLock.isAuthenticating) return;
+      if (AuthLock.lastSuccess != null &&
+          DateTime.now().difference(AuthLock.lastSuccess!).inSeconds < 4) {
+        return;
+    }
+
+    _authenticate();
+  }
+
+  Future<void> _authenticate() async {
+    final ok = await _biometricService.authenticate(
+      reason: 'Identifícate para acceder a Proprice',
+    );
+
+    if (ok) {
+      debugPrint("OK AUTH");
+    } else {
+      debugPrint("AUTH FAILED");
+    }
+  }
+
+
 
   void _toggleFavorite(Map<String, dynamic> item) {
     HapticFeedback.lightImpact();
-    setState(() {
-      int idx = grainsData.indexWhere((g) => g["name"] == item["name"]);
-      grainsData[idx]["isFav"] = !grainsData[idx]["isFav"];
-      _saveFavorites();
+    
+    // 1. On utilise le provider pour gérer la logique
+    final provider = context.read<UserDataProvider>();
+    provider.toggleFavorite(item['name']);
 
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(grainsData[idx]["isFav"] ? "${item['name']} Añadido" : "${item['name']} Eliminado"),
-          duration: const Duration(seconds: 1),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          backgroundColor: const Color(0xFF1B4D3E),
-        ),
-      );
-    });
+    // 2. On vérifie le nouvel état pour afficher le bon message
+    final isNowFav = provider.isFavorite(item['name']);
+
+    // 3. Feedback visuel (SnackBar)
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isNowFav ? "${item['name']} Añadido" : "${item['name']} Eliminado"),
+        duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: const Color(0xFF1B4D3E),
+      ),
+    );
   }
 
   void _onSelectGrain(String name) {
@@ -86,58 +135,87 @@ class _HomePageState extends State<HomePage> {
     setState(() => _selectedIndex = index);
   }
 
-  @override
+@override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    // 1. On récupère les paramètres via le Provider
+    final appSettings = context.watch<AppSettings>();
+
+
+
     const Color darkGreen = Color(0xFF1B4D3E);
 
+    // 3. Définition du contenu du body selon l'index
     Widget bodyContent;
     if (_selectedIndex == 1) {
       bodyContent = const NewsPage();
     } else if (_selectedIndex == 0) {
-      bodyContent = _buildHomeContent(darkGreen);
+      bodyContent = _buildHomeContent(darkGreen, appSettings);
     } else if (_selectedIndex == 2) {
-      bodyContent = const SettingsPage(); 
+      bodyContent = const SettingsPage();
     } else {
-      bodyContent = const Center(child: Text("Perfil en construcción"));
+      bodyContent = const ProfilePage();
     }
 
+    // 4. Retour du Scaffold
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFFF2EFE9),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        title: const Text('PROPRICE', style: TextStyle(color: darkGreen, fontWeight: FontWeight.w900, fontSize: 24)),
-        actions: [IconButton(icon: const Icon(Icons.menu_open_rounded, color: darkGreen, size: 32), onPressed: () {})],
+        title: const Text('PROPRICE',
+            style: TextStyle(
+                color: darkGreen, fontWeight: FontWeight.w900, fontSize: 24)),
+        actions: [
+          IconButton(
+              icon: const Icon(Icons.menu_open_rounded,
+                  color: darkGreen, size: 32),
+              onPressed: () {})
+        ],
       ),
       body: bodyContent,
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20)]),
+        decoration: BoxDecoration(boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05), blurRadius: 20)
+        ]),
         child: BottomNavigationBar(
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,
           selectedItemColor: darkGreen,
-          unselectedItemColor: darkGreen.withOpacity(0.3),
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          unselectedItemColor: darkGreen.withValues(alpha: 0.3),
+          selectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 12),
           currentIndex: _selectedIndex,
           onTap: _onItemTapped,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home_max_rounded, size: 26), label: 'HOME'),
-            BottomNavigationBarItem(icon: Icon(Icons.article_rounded, size: 26), label: 'NEWS'),
-            BottomNavigationBarItem(icon: Icon(Icons.settings_suggest_rounded, size: 26), label: 'SETTINGS'),
-            BottomNavigationBarItem(icon: Icon(Icons.person_rounded, size: 26), label: 'PROFILE'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.home_max_rounded, size: 26), label: 'HOME'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.article_rounded, size: 26), label: 'NEWS'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.settings_suggest_rounded, size: 26),
+                label: 'SETTINGS'),
+            BottomNavigationBarItem(
+                icon: Icon(Icons.person_rounded, size: 26),
+                label: 'PROFILE'),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHomeContent(Color darkGreen) {
+  Widget _buildHomeContent(Color darkGreen, AppSettings appSettings) { 
+    final provider = context.watch<UserDataProvider>();
+    final List<Map<String, dynamic>> grainsData = provider.grainsData;
+
     List<Map<String, dynamic>> sortedList = List.from(grainsData);
     sortedList.sort((a, b) {
-      if (a["isFav"] != b["isFav"]) return a["isFav"] ? -1 : 1;
-      return a["order"].compareTo(b["order"]);
+      bool aFav = provider.isFavorite(a["name"]);
+      bool bFav = provider.isFavorite(b["name"]);
+      if (aFav != bFav) return aFav ? -1 : 1;
+      return (a["order"] as int).compareTo(b["order"] as int);
     });
+
 
     final currentData = grainsData.firstWhere((g) => g["name"] == selectedGrain);
     final bool isPositive = (currentData["variation"] as String).contains('+');
@@ -160,7 +238,15 @@ class _HomePageState extends State<HomePage> {
                 textBaseline: TextBaseline.alphabetic,
                 children: [
                   Text("\$ ", style: TextStyle(color: darkGreen.withOpacity(0.5), fontSize: 24, fontWeight: FontWeight.bold)),
-                  Text("${currentData["price"]}", style: TextStyle(color: darkGreen, fontSize: 56, fontWeight: FontWeight.w900, letterSpacing: -2)),
+                  Text(
+                    appSettings.hideBalance ? "****" : "${currentData["price"]}",
+                    style: TextStyle(
+                      color: darkGreen, 
+                      fontSize: appSettings.hideBalance ? 40 : 56, // Optionnel : on réduit la taille pour que les étoiles rendent bien
+                      fontWeight: FontWeight.w900, 
+                      letterSpacing: appSettings.hideBalance ? 0 : -2
+                    )
+                  ),
                   Text(" / Tn", style: TextStyle(color: darkGreen.withOpacity(0.5), fontSize: 18, fontWeight: FontWeight.bold)),
                   const Spacer(),
                   Container(
@@ -221,8 +307,7 @@ class _HomePageState extends State<HomePage> {
                 itemBuilder: (context, index) {
                   final item = sortedList[index];
                   final isSelected = selectedGrain == item["name"];
-                  final isFav = item["isFav"];
-                  return AnimatedContainer(
+                  final isFav = context.watch<UserDataProvider>().isFavorite(item["name"]);                  return AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     margin: const EdgeInsets.symmetric(vertical: 6),
                     child: Material(
@@ -292,13 +377,11 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// --- COMPOSANTS GRAPHIQUES ---
-
+// --- LES CLASSES DE GRAPHIQUES RESTENT IDENTIQUES ---
 class RealMiniChart extends StatelessWidget {
   final String variation;
   final Color color;
   final double price;
-
   const RealMiniChart({super.key, required this.variation, required this.color, required this.price});
 
   @override
@@ -332,7 +415,6 @@ class _ChartPainter extends CustomPainter {
     final paint = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2.2..strokeCap = StrokeCap.round;
     final dashPaint = Paint()..color = color.withOpacity(0.15)..style = PaintingStyle.stroke..strokeWidth = 1;
     
-    // Ligne pointillée centrale
     for (double i = 0; i < size.width; i += 5) {
       canvas.drawLine(Offset(i, size.height / 2), Offset(i + 2, size.height / 2), dashPaint);
     }
@@ -346,9 +428,7 @@ class _ChartPainter extends CustomPainter {
     for (int i = 0; i <= segments; i++) {
       double x = i * step;
       double noise = rand.nextDouble() * 12;
-      double trend = isPositive 
-          ? (size.height * 0.75) - (i * 4) 
-          : (size.height * 0.25) + (i * 4);
+      double trend = isPositive ? (size.height * 0.75) - (i * 4) : (size.height * 0.25) + (i * 4);
       pts.add(Offset(x, (trend + noise).clamp(2, size.height - 2)));
     }
 

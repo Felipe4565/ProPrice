@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:local_auth/local_auth.dart';
+import 'package:proprice/services/biometric_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'terms_conditions.dart';
 
 class SecurityPage extends StatefulWidget {
   const SecurityPage({super.key});
@@ -10,7 +12,7 @@ class SecurityPage extends StatefulWidget {
 }
 
 class _SecurityPageState extends State<SecurityPage> {
-  final LocalAuthentication auth = LocalAuthentication();
+  final biometricService = BiometricService();
   bool _isBiometricEnabled = false; // Valeur initiale
 
   @override
@@ -74,8 +76,11 @@ class _SecurityPageState extends State<SecurityPage> {
             icon: Icons.description_outlined,
             title: "Términos y condiciones",
             onTap: () {
-              // Action pour ouvrir les conditions
-            },
+              Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const TermsAndConditionsPage()),
+                  );   
+           },
           ),
 
           const SizedBox(height: 40),
@@ -166,9 +171,8 @@ class _SecurityPageState extends State<SecurityPage> {
               "Eliminar cuenta", 
               style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)
             ),
-            onTap: () {
-              // Logique de confirmation de suppression
-            },
+            // --- MODIFICATION ICI ---
+            onTap: () => _showDeleteAccountDialog(context),
           ),
         ),
       ],
@@ -402,24 +406,17 @@ void _showEditEmailDialog(BuildContext context) {
 
     if (!targetValue) {
       setState(() => _isBiometricEnabled = false);
-      await prefs.setBool('bio_enabled', false); // Sauvegarde locale
+      await prefs.setBool('bio_enabled', false);
       return;
     }
 
-    try {
-      final bool canAuthenticate = await auth.canCheckBiometrics || await auth.isDeviceSupported();
-      if (!canAuthenticate) return;
+    final ok = await biometricService.authenticate(
+      reason: 'Identifícate para entrar en Proprice',
+    );
 
-      final bool didAuthenticate = await auth.authenticate(
-        localizedReason: 'Confirma tu identidad para activar la biometría',
-      );
-
-      if (didAuthenticate) {
-        setState(() => _isBiometricEnabled = true);
-        await prefs.setBool('bio_enabled', true); // Sauvegarde locale après succès
-      }
-    } catch (e) {
-      debugPrint("Error: $e");
+    if (ok) {
+      setState(() => _isBiometricEnabled = true);
+      await prefs.setBool('bio_enabled', true);
     }
   }
 
@@ -439,4 +436,71 @@ void _showEditEmailDialog(BuildContext context) {
   }
 
 
+  void _showDeleteAccountDialog(BuildContext context) {
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF2EFE9),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Eliminar cuenta",
+          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Esta acción es irreversible. Confirma tus credenciales para proceder."),
+            const SizedBox(height: 20),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: "Email",
+                prefixIcon: const Icon(Icons.email_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: "Contraseña",
+                prefixIcon: const Icon(Icons.lock_outline),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCELAR", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              if (emailController.text.isEmpty || passwordController.text.isEmpty) {
+                // Petit message d'erreur si vide
+                return; 
+              }
+              // ICI : Ajoute ta logique d'appel API ou Firebase Auth
+              // Exemple : await _authService.deleteUser(email: emailController.text, password: passwordController.text);
+              
+              debugPrint("Suppression demandée pour: ${emailController.text}");
+              Navigator.pop(context);
+            },
+            child: const Text("ELIMINAR", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 }

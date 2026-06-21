@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'settings_subpages/currency_page.dart';
+import 'settings_subpages/language_page.dart';
 // Importation des fichiers séparés (Assure-toi de les avoir créés dans le dossier settings_subpages)
 import 'settings_subpages/profile_page.dart';
 import 'settings_subpages/security_page.dart';
-import 'settings_subpages/alerts_page.dart';
-import 'settings_subpages/language_page.dart';
-import 'settings_subpages/currency_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -74,9 +73,10 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             _buildSettingItem(
               Icons.language_rounded, 
-              "Idioma (Español)",
+              "Idioma", 
               onTap: () => _navigateTo(context, const LanguagePage()),
             ),
+
             _buildSettingItem(
               Icons.account_balance_wallet_outlined, 
               "Valores-Divisa-Balanza",

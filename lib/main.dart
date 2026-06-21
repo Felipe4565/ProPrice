@@ -1,14 +1,25 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:local_auth/local_auth.dart'; // AJOUTÉ
-import 'package:shared_preferences/shared_preferences.dart'; // AJOUTÉ
+import 'package:local_auth/local_auth.dart';
+import 'package:provider/provider.dart';
 
-import 'pages/home_page.dart'; 
+import 'pages/home_page.dart';
+import 'providers/app_settings.dart';
+import 'providers/user_data_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const PropriceApp());
+  
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppSettings()),
+        ChangeNotifierProvider(create: (_) => UserDataProvider()),
+      ],
+      child: const PropriceApp(),
+    ),
+  );
 }
 
 class PropriceApp extends StatelessWidget {
@@ -50,37 +61,10 @@ class _SplashScreenState extends State<SplashScreen> {
     _startAppSequence();
   }
 
-  // --- LOGIQUE DE SÉCURITÉ AU DÉMARRAGE ---
-  Future<void> _startAppSequence() async {
-    // 1. Petit délai pour que l'utilisateur voie ton logo (2s)
-    await Future.delayed(const Duration(seconds: 2));
-
-    // 2. On vérifie si la biométrie est activée
-    final prefs = await SharedPreferences.getInstance();
-    final bool isBioEnabled = prefs.getBool('bio_enabled') ?? false;
-
-    if (isBioEnabled) {
-      try {
-        // 3. On demande l'empreinte/FaceID
-        bool didAuthenticate = await auth.authenticate(
-          localizedReason: 'Identifícate para entrar en Proprice',
-        );
-
-        if (didAuthenticate) {
-          _navigateToHome();
-        } else {
-          // Si l'utilisateur annule, on peut lui laisser un bouton pour réessayer
-          // Pour l'instant on reste sur le splash
-        }
-      } catch (e) {
-        debugPrint("Erreur biométrie: $e");
-        _navigateToHome(); // En cas d'erreur technique, on laisse passer
-      }
-    } else {
-      // Si pas activé, on va direct à la home
-      _navigateToHome();
-    }
-  }
+Future<void> _startAppSequence() async {
+  await Future.delayed(const Duration(seconds: 2));
+  _navigateToHome();
+}
 
   void _navigateToHome() {
     if (mounted) {

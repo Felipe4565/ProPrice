@@ -7,7 +7,8 @@ plugins {
 android {
     namespace = "com.example.proprice"
     // On fixe ici pour être sûr de la compatibilité avec les librairies récentes
-    compileSdk = 35 
+    compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -20,11 +21,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.proprice"
-        
-        // --- MODIFICATION CRUCIALE ICI ---
-        // On remplace 'flutter.minSdkVersion' par 21 (requis pour la biométrie)
-        minSdk = flutter.minSdkVersion 
-        
+
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
