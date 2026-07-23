@@ -9,9 +9,10 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/biometric_service.dart';
+import 'chart_page.dart';
 import 'news_page.dart';
 import 'profile_page.dart';
-import 'settings_page.dart';
+import 'settings_page.dart'; 
 
 
 class HomePage extends StatefulWidget {
@@ -135,7 +136,171 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => _selectedIndex = index);
   }
 
-@override
+  // --- LOGIQUE POPUP ALERTE ---
+  void _showAlertDialog(BuildContext mainContext, String grainName, double defaultPrice) {
+    final TextEditingController priceController = TextEditingController(
+      text: defaultPrice.toStringAsFixed(2),
+    );
+    final provider = context.read<UserDataProvider>();
+    final commodityAlerts = provider.alerts
+        .where((a) => a['commodity'].toString().toUpperCase() == grainName.toUpperCase())
+        .toList();
+
+    showDialog(
+      context: mainContext,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: const Color(0xFFF2EFE9),
+          title: Row(
+            children: const [
+              Text('🔔', style: TextStyle(fontSize: 24)),
+              SizedBox(width: 10),
+              Text(
+                'Définir une alerte',
+                style: TextStyle(
+                  color: Color(0xFF1B4332),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Entrez le seuil de prix pour $grainName :',
+                style: TextStyle(
+                  color: const Color(0xFF1B4332).withValues(alpha: 0.8),
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: priceController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Seuil cible (\$)',
+                  labelStyle: const TextStyle(color: Color(0xFF1B4332)),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide(color: const Color(0xFF1B4332).withValues(alpha: 0.2)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(color: Color(0xFF1B4332), width: 2),
+                  ),
+                ),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF1B4332),
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'Annuler',
+                style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.6)),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1B4332),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                final parsedPrice = double.tryParse(priceController.text.replaceAll(',', '.'));
+                if (parsedPrice != null) {
+                  Navigator.pop(dialogContext);
+
+                  bool exists = commodityAlerts.any((a) => (a['price'] as double) == parsedPrice);
+
+                  if (exists) {
+                    showDialog(
+                      context: mainContext,
+                      builder: (confirmContext) {
+                        return AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          backgroundColor: const Color(0xFFF2EFE9),
+                          title: const Text(
+                            'Alerte existante',
+                            style: TextStyle(
+                              color: Color(0xFF1B4332),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          ),
+                          content: Text(
+                            'Une alerte existe déjà au prix de ${parsedPrice.toStringAsFixed(2)} \$. Êtes-vous sûr de vouloir en placer une autre au même prix ?',
+                            style: TextStyle(
+                              color: const Color(0xFF1B4332).withValues(alpha: 0.8),
+                              fontSize: 14,
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(confirmContext),
+                              child: Text(
+                                'Annuler',
+                                style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.6)),
+                              ),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF1B4332),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: () {
+                                Navigator.pop(confirmContext);
+                                provider.addAlert(grainName, parsedPrice);
+                                ScaffoldMessenger.of(mainContext).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Alerte ajoutée : $grainName > ${parsedPrice.toStringAsFixed(2)} \$'),
+                                    backgroundColor: const Color(0xFF1B4332),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                );
+                              },
+                              child: const Text('Confirmer', style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  } else {
+                    provider.addAlert(grainName, parsedPrice);
+                    ScaffoldMessenger.of(mainContext).showSnackBar(
+                      SnackBar(
+                        content: Text('Alerte ajoutée : $grainName > ${parsedPrice.toStringAsFixed(2)} \$'),
+                        backgroundColor: const Color(0xFF1B4332),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Confirmer', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     // 1. On récupère les paramètres via le Provider
     final appSettings = context.watch<AppSettings>();
@@ -251,17 +416,43 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   const Spacer(),
                   Container(
                     decoration: BoxDecoration(boxShadow: [BoxShadow(color: darkGreen.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 8))]),
-                    child: ElevatedButton(
-                      onPressed: () {},
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: darkGreen,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                      ),
-                      child: const Text("VER GRAFICO", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  child:ElevatedButton(
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+
+                      // 1. On accède au provider pour lire l'état actuel
+                      final provider = context.read<UserDataProvider>();
+                      
+                      // 2. On crée le notifier avec l'état initial du grain sélectionné
+                      final favoriteNotifier = ValueNotifier<bool>(provider.isFavorite(selectedGrain));
+                      
+                      // 3. On crée un lien : si on change le favori dans ChartPage, le provider est mis à jour
+                      favoriteNotifier.addListener(() {
+                        if (favoriteNotifier.value != provider.isFavorite(selectedGrain)) {
+                          provider.toggleFavorite(selectedGrain);
+                        }
+                      });
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          // On passe maintenant les deux paramètres requis
+                          builder: (context) => ChartPage(
+                            commodityName: selectedGrain,
+                            favoriteNotifier: favoriteNotifier,
+                          ),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: darkGreen,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                     ),
+                    child: const Text("VER GRAFICO", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
                   ),
                 ],
               ),
@@ -307,7 +498,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 itemBuilder: (context, index) {
                   final item = sortedList[index];
                   final isSelected = selectedGrain == item["name"];
-                  final isFav = context.watch<UserDataProvider>().isFavorite(item["name"]);                  return AnimatedContainer(
+                  final isFav = context.watch<UserDataProvider>().isFavorite(item["name"]);               return AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     margin: const EdgeInsets.symmetric(vertical: 6),
                     child: Material(
@@ -331,9 +522,55 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               if (isSelected) ...[
                                 _whiteIconButton(isFav ? Icons.star_rounded : Icons.star_outline_rounded, isFav ? Colors.orange : darkGreen, () => _toggleFavorite(item)),
                                 const SizedBox(width: 8),
-                                _whiteIconButton(Icons.notifications_active_outlined, darkGreen, () {}),
+                                _whiteIconButton(Icons.notifications_active_outlined, darkGreen, () {
+                                  HapticFeedback.lightImpact();
+                                  double defaultPrice = double.tryParse(item["price"].toString()) ?? 0.0;
+                                  
+                                  // 1. Navigation vers la page graphique (ChartPage)
+                                  final provider = context.read<UserDataProvider>();
+                                  final favoriteNotifier = ValueNotifier<bool>(provider.isFavorite(item["name"]));
+                                  favoriteNotifier.addListener(() {
+                                    if (favoriteNotifier.value != provider.isFavorite(item["name"])) {
+                                      provider.toggleFavorite(item["name"]);
+                                    }
+                                  });
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ChartPage(
+                                        commodityName: item["name"],
+                                        favoriteNotifier: favoriteNotifier,
+                                      ),
+                                    ),
+                                  );
+
+                                  // 2. Affichage direct du popup d'alerte par-dessus la page graphique
+                                  Future.delayed(const Duration(milliseconds: 300), () {
+                                    if (mounted) {
+                                      _showAlertDialog(context, item["name"], defaultPrice);
+                                    }
+                                  });
+                                }),
                                 const SizedBox(width: 8),
-                                _whiteIconButton(Icons.bar_chart_rounded, darkGreen, () {}),
+                                _whiteIconButton(Icons.bar_chart_rounded, darkGreen, () {
+                                  HapticFeedback.lightImpact();
+                                  final provider = context.read<UserDataProvider>();
+                                  final favoriteNotifier = ValueNotifier<bool>(provider.isFavorite(item["name"]));
+                                  favoriteNotifier.addListener(() {
+                                    if (favoriteNotifier.value != provider.isFavorite(item["name"])) {
+                                      provider.toggleFavorite(item["name"]);
+                                    }
+                                  });
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ChartPage(
+                                        commodityName: item["name"],
+                                        favoriteNotifier: favoriteNotifier,
+                                      ),
+                                    ),
+                                  );
+                                }),
                               ] else ...[
                                 GestureDetector(
                                   onTap: () => _toggleFavorite(item),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/user_data_provider.dart';
+import 'article_detail_page.dart'; // Assure-toi que cet import est correct
 import 'settings_page.dart';
 
 class ProfilePage extends StatelessWidget {
@@ -12,13 +14,17 @@ class ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // On récupère le provider pour écouter les changements de favoris
+    // 1. On écoute le provider
     final provider = context.watch<UserDataProvider>();
     
-    // On filtre les données pour ne garder que les favoris
+    // On filtre les favoris
     final favoriteGrains = provider.grainsData
         .where((g) => provider.isFavorite(g["name"]))
         .toList();
+
+    // On récupère l'article et les alertes
+    final lastArticle = provider.lastArticle;
+    final alerts = provider.alerts;
 
     return Scaffold(
       backgroundColor: backgroundCream,
@@ -64,14 +70,14 @@ class ProfilePage extends StatelessWidget {
             // --- ACTIONS RAPIDES ---
             Row(
               children: [
-                Expanded(child: _buildActionButton("Añadir Cultivo", Icons.add_circle_outline, Colors.blueGrey)),
+                Expanded(child: _buildActionButton("Añadir Cultivo", Icons.add_circle_outline, Colors.blueGrey, () {})),
                 const SizedBox(width: 10),
-                Expanded(child: _buildActionButton("Nueva Alerta", Icons.notification_add_outlined, Colors.orange)),
+                Expanded(child: _buildActionButton("Nueva Alerta", Icons.notification_add_outlined, Colors.orange, () {})),
               ],
             ),
             const SizedBox(height: 30),
 
-            // --- LISTE DES FAVORIS DYNAMIQUE ---
+            // --- CULTIVOS FAVORITOS ---
             _buildSectionTitle("CULTIVOS FAVORITOS"),
             if (favoriteGrains.isEmpty)
               const Padding(
@@ -85,13 +91,53 @@ class ProfilePage extends StatelessWidget {
                 Icons.grass
               )),
 
-            // --- RESTE DES SECTIONS ---
-            _buildSectionTitle("MIS ALERTAS"),
-            _buildListTile("Precio Soja < 500", "Activa", Icons.notifications_active),
+            // --- DERNIER ARTICLE (DYNAMIQUE) ---
+            _buildSectionTitle("ÚLTIMO ARTÍCULO LEÍDO"),
+            lastArticle == null 
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Text("Ningún artículo leído todavía."),
+                )
+              : _buildListTile(
+                  lastArticle['title'] ?? "Sin título",
+                  "Toca para volver a leer",
+                  Icons.article,
+                  onTap: () {
+                    Navigator.push(
+                      context, 
+                      MaterialPageRoute(
+                        builder: (context) => ArticleDetailPage(article: lastArticle)
+                      )
+                    );
+                  },
+                ),
 
-            _buildSectionTitle("ÚLTIMOS ARTÍCULOS"),
-            _buildListTile("Tendencias 2026", "Leer ahora", Icons.article),
+            // --- MIS ALERTAS (DYNAMIQUE) ---
+            _buildSectionTitle("MIS ALERTAS"),
+            if (alerts.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 10),
+                child: Text("No tienes alertas activas.", style: TextStyle(fontStyle: FontStyle.italic)),
+              )
+            else
+              ...alerts.asMap().entries.map((entry) {
+                final index = entry.key;
+                final alert = entry.value;
+                return _buildListTile(
+                  "${alert['commodity'].toUpperCase()} > ${alert['price']} \$",
+                  alert['status'],
+                  Icons.notifications_active,
+                  trailing: IconButton(
+                    icon: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade400),
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      provider.removeAlert(index);
+                    },
+                  ),
+                );
+              }),
             
+            // --- HISTORIAL DE ALERTAS ---
             _buildSectionTitle("HISTORIAL DE ALERTAS"),
             _buildListTile("Maíz subió 2%", "Hace 2h", Icons.history),
             
@@ -102,8 +148,7 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  // --- WIDGETS AIDES ---
-
+  // --- WIDGETS ---
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(top: 25, bottom: 10),
@@ -119,9 +164,9 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButton(String label, IconData icon, Color color) {
+  Widget _buildActionButton(String label, IconData icon, Color color, VoidCallback onPressed) {
     return ElevatedButton.icon(
-      onPressed: () {},
+      onPressed: onPressed,
       icon: Icon(icon, size: 18),
       label: Text(label),
       style: ElevatedButton.styleFrom(
@@ -133,15 +178,16 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _buildListTile(String title, String subtitle, IconData icon) {
+  Widget _buildListTile(String title, String subtitle, IconData icon, {VoidCallback? onTap, Widget? trailing}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
       child: ListTile(
+        onTap: onTap,
         leading: Icon(icon, color: forestGreen),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right, size: 20),
+        trailing: trailing ?? const Icon(Icons.chevron_right, size: 20),
       ),
     );
   }

@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 
 import 'settings_subpages/currency_page.dart';
 import 'settings_subpages/language_page.dart';
-// Importation des fichiers séparés (Assure-toi de les avoir créés dans le dossier settings_subpages)
 import 'settings_subpages/profile_page.dart';
 import 'settings_subpages/security_page.dart';
 
@@ -15,7 +14,6 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  // État local pour l'interrupteur rapide des notifications
   bool _notificationsEnabled = true;
 
   @override
@@ -25,12 +23,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
     return Scaffold(
       backgroundColor: backgroundCream,
+      appBar: AppBar(
+        backgroundColor: backgroundCream,
+        elevation: 0,
+        // C'est ici la magie : Flutter détecte seul si il doit mettre la flèche
+        automaticallyImplyLeading: true,
+        // Force la couleur de la flèche automatique à ton vert
+        iconTheme: const IconThemeData(color: forestGreen),
+      ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(
           children: [
-            const SizedBox(height: 60),
-            
             // TITRE DE LA PAGE
             const Center(
               child: Text(
@@ -99,23 +103,22 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             
-            const SizedBox(height: 120), // Espace pour le scroll au-dessus de la barre de navigation
+            const SizedBox(height: 40),
           ],
         ),
       ),
     );
   }
 
-  // --- FONCTION DE NAVIGATION GÉNÉRIQUE ---
+  // --- MÉTHODES UTILITAIRES ---
   void _navigateTo(BuildContext context, Widget page) {
-    HapticFeedback.lightImpact(); // Vibration légère pour le feeling
+    HapticFeedback.lightImpact();
     Navigator.push(
       context, 
       MaterialPageRoute(builder: (context) => page),
     );
   }
 
-  // --- WIDGET : TITRE DE SECTION ---
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
@@ -134,7 +137,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // --- WIDGET : ÉLÉMENT DE LISTE (BOUTON) ---
   Widget _buildSettingItem(IconData icon, String title, {required VoidCallback onTap}) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 6),
@@ -168,7 +170,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // --- WIDGET : ÉLÉMENT AVEC INTERRUPTEUR ---
   Widget _buildSettingSwitch(IconData icon, String title, bool value, Function(bool) onChanged) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 6),
@@ -199,7 +200,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // --- DIALOGUE DE CONFIRMATION ---
   void _confirmLogout() {
     showDialog(
       context: context,

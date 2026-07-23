@@ -7,8 +7,16 @@ class BiometricService {
   final LocalAuthentication _auth = LocalAuthentication();
 
   Future<bool> authenticate({String reason = 'Authentification requise'}) async {
+    if (AuthLock.isFullScreenActive) {
+      return false;
+    }
 
     final now = DateTime.now();
+
+    // 🛡️ Ignore la demande si on sort tout juste du plein écran (transitions de rotation)
+    if (AuthLock.skipUntil != null && now.isBefore(AuthLock.skipUntil!)) {
+      return false;
+    }
 
     // 🔥 GLOBAL LOCK
     if (AuthLock.isAuthenticating) return false;

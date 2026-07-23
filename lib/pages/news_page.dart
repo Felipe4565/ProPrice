@@ -1,11 +1,15 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'dart:async';
-import 'package:shimmer/shimmer.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
+import 'package:proprice/providers/user_data_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shimmer/shimmer.dart';
+
 import 'article_detail_page.dart';
 
 class NewsPage extends StatefulWidget {
@@ -311,7 +315,15 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
 
     return GestureDetector(
       onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => ArticleDetailPage(article: art)));
+        // 1. Sauvegarder l'objet complet (art) dans le Provider
+        // On passe maintenant la Map entière, pas juste le titre
+        context.read<UserDataProvider>().setLastArticle(art);
+        
+        // 2. Naviguer vers les détails
+        Navigator.push(
+          context, 
+          MaterialPageRoute(builder: (context) => ArticleDetailPage(article: art))
+        );
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 24),
