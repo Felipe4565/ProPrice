@@ -33,6 +33,7 @@ class _ChartPageState extends State<ChartPage> {
   final List<String> periods = ["1D", "1W", "1M", "3M", "1Y"];
   bool isCandleView = false; // <-- Vue courbe par défaut
   DateTime lastUpdateTime = DateTime.now();
+  late ZoomPanBehavior _zoomPanBehavior;
 
   // Configuration API et Domaines Actualités
   final String _apiKey = "ebfe0c0a67ca4acab293895eca1c5410";
@@ -42,6 +43,13 @@ class _ChartPageState extends State<ChartPage> {
   void initState() {
     super.initState();
     lastUpdateTime = DateTime.now();
+    _zoomPanBehavior = ZoomPanBehavior(
+      enablePinching: true,
+      enablePanning: true,
+      enableDoubleTapZooming: true,
+      enableSelectionZooming: true, // <-- Ajouté pour permettre le zoom par drag sur X et Y
+      zoomMode: ZoomMode.xy,
+    );
   }
 
   String _getContractInfo() {
@@ -386,6 +394,7 @@ class _ChartPageState extends State<ChartPage> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(25),
                 child: SfCartesianChart(
+                  zoomPanBehavior: _zoomPanBehavior, // <-- ZOOM ET PAN ACTIVÉS ICI
                   trackballBehavior: TrackballBehavior(
                     enable: true,
                     activationMode: ActivationMode.singleTap,
@@ -1058,11 +1067,20 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
   bool isCandleView = false; // <-- Vue courbe par défaut en plein écran aussi
   CandleData? selectedCandle;
   final List<String> periods = ["1D", "1W", "1M", "3M", "1Y"];
+  late ZoomPanBehavior _zoomPanBehavior;
 
   @override
   void initState() {
     super.initState();
     selectedPeriod = widget.initialPeriod;
+    
+    _zoomPanBehavior = ZoomPanBehavior(
+      enablePinching: true,
+      enablePanning: true,
+      enableDoubleTapZooming: true,
+      enableSelectionZooming: true, // <-- Ajouté également en plein écran
+      zoomMode: ZoomMode.xy,
+    );
     
     AuthLock.isFullScreenActive = true;
 
@@ -1471,6 +1489,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
                   child: SfCartesianChart(
+                    zoomPanBehavior: _zoomPanBehavior, // <-- ZOOM ET PAN ACTIVÉS ICI AUSSI
                     trackballBehavior: TrackballBehavior(
                       enable: true,
                       activationMode: ActivationMode.singleTap,
