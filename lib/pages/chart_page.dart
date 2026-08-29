@@ -31,9 +31,25 @@ class _ChartPageState extends State<ChartPage> {
   CandleData? selectedCandle; 
   String selectedPeriod = "1D";
   final List<String> periods = ["1D", "1W", "1M", "3M", "1Y"];
-  bool isCandleView = false; // <-- Vue courbe par défaut
+  bool isCandleView = false;
   DateTime lastUpdateTime = DateTime.now();
   late ZoomPanBehavior _zoomPanBehavior;
+  
+  double? _manualYMin;
+  double? _manualYMax;
+  double? _lastYDragPosition;
+
+  // États pour les indicateurs techniques
+  bool showEMA = false;
+  bool showFibonacci = false;
+  int emaPeriod = 20;
+  Color emaColor = Colors.blue;
+
+  // États et configurations pour le Fibonacci personnalisé (Glissé-déposé, Clics, Pourcentages & Couleurs)
+  CandleData? fibStartCandle;
+  CandleData? fibEndCandle;
+  List<double> fibPercentages = [0.0, 0.236, 0.382, 0.5, 0.618, 1.0];
+  Color fibColor = Colors.orange;
 
   // Configuration API et Domaines Actualités
   final String _apiKey = "ebfe0c0a67ca4acab293895eca1c5410";
@@ -45,10 +61,546 @@ class _ChartPageState extends State<ChartPage> {
     lastUpdateTime = DateTime.now();
     _zoomPanBehavior = ZoomPanBehavior(
       enablePinching: true,
-      enablePanning: true,
+      enablePanning: !showFibonacci, // Désactive le pan si Fibo actif pour dessiner
       enableDoubleTapZooming: true,
-      enableSelectionZooming: true, // <-- Ajouté pour permettre le zoom par drag sur X et Y
-      zoomMode: ZoomMode.xy,
+      enableSelectionZooming: true, 
+      zoomMode: ZoomMode.x,
+    );
+  }
+
+  void _updateZoomPanBehavior() {
+    setState(() {
+      _zoomPanBehavior = ZoomPanBehavior(
+        enablePinching: true,
+        enablePanning: !showFibonacci,
+        enableDoubleTapZooming: true,
+        enableSelectionZooming: true, 
+        zoomMode: ZoomMode.x,
+      );
+    });
+  }
+
+  void _handleYAxisDrag(double delta, double chartHeight, double chartMinVal, double chartMaxVal) {
+    setState(() {
+      if (_manualYMin == null || _manualYMax == null) {
+        _manualYMin = chartMinVal;
+        _manualYMax = chartMaxVal;
+      }
+      double range = _manualYMax! - _manualYMin!;
+      double center = (_manualYMin! + _manualYMax!) / 2;
+      
+      double scaleFactor = 1.0 + (delta * 0.005);
+      double newRange = range * scaleFactor;
+      
+      double baseRange = chartMaxVal - chartMinVal;
+      if (newRange > 0.1 && newRange < baseRange * 15) {
+        _manualYMin = center - newRange / 2;
+        _manualYMax = center + newRange / 2;
+      }
+    });
+  }
+
+  // Génération des PlotBands pour les Retracements de Fibonacci personnalisés (Pourcentages, Couleurs & Recalcul)
+  List<PlotBand> _getFibonacciPlotBands(List<CandleData> data) {
+    if (!showFibonacci || data.isEmpty || fibStartCandle == null) return [];
+    
+    // Si seul le point de départ est défini, on affiche uniquement la barre de référence
+    if (fibStartCandle != null && fibEndCandle == null) {
+      double refPrice = fibStartCandle!.close;
+      return [
+        PlotBand(
+          start: refPrice,
+          end: refPrice,
+          borderColor: fibColor,
+          borderWidth: 1.5,
+          dashArray: const [3, 3],
+          text: 'Référence (${refPrice.toStringAsFixed(2)} \$)',
+          textStyle: TextStyle(
+            color: fibColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+          ),
+          horizontalTextAlignment: TextAnchor.end,
+        ),
+      ];
+    }
+
+    // Si les deux points sont définis, on trace le Fibonacci complet selon les pourcentages choisis
+    double p1 = fibStartCandle!.close;
+    double p2 = fibEndCandle!.close;
+    double high = p1 > p2 ? p1 : p2;
+    double low = p1 > p2 ? p2 : p1;
+    
+    double diff = high - low;
+
+    List<PlotBand> bands = [];
+    for (var p in fibPercentages) {
+      double val = high - diff * p;
+      String label = p == 0.0 
+          ? 'Fibo 0% (${high.toStringAsFixed(2)})'
+          : p == 1.0 
+              ? 'Fibo 100% (${low.toStringAsFixed(2)})'
+              : 'Fibo ${(p * 100).toStringAsFixed(1)}%';
+      bands.add(
+        PlotBand(
+          start: val,
+          end: val,
+          borderColor: fibColor,
+          borderWidth: 1.2,
+          dashArray: const [4, 4],
+          text: label,
+          textStyle: TextStyle(
+            color: fibColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+          ),
+          horizontalTextAlignment: TextAnchor.end,
+        ),
+      );
+    }
+    return bands;
+  }
+
+  // Bloc de contrôle et réglage rapide avec rouage sous le graphique (EMA & Fibonacci)
+  Widget _buildIndicatorControlBlock() {
+    if (!showEMA && !showFibonacci) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF1B4332).withValues(alpha: 0.15)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.settings, size: 18, color: Color(0xFF1B4332)),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Réglages Indicateurs Actifs',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1B4332),
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                constraints: const BoxConstraints(),
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.tune, size: 18, color: Color(0xFF1B4332)),
+                tooltip: 'Paramètres avancés',
+                onPressed: () => _showAdvancedIndicatorSettingsDialog(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (showEMA) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'EMA Période : $emaPeriod',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1B4332)),
+                ),
+                Row(
+                  children: [
+                    for (var p in [9, 20, 50, 200])
+                      GestureDetector(
+                        onTap: () {
+                          final currentData = generateMarketData(widget.commodityName, selectedPeriod);
+                          setState(() {
+                            emaPeriod = p;
+                            if (currentData.length < emaPeriod) {
+                              showEMA = false;
+                            }
+                          });
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(left: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: emaPeriod == p ? const Color(0xFF1B4332) : Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '$p',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: emaPeriod == p ? Colors.white : const Color(0xFF1B4332),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+          if (showEMA && showFibonacci) const Divider(height: 14),
+          if (showFibonacci) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    fibStartCandle == null
+                        ? '✨ Cliquez sur le graphique pour placer le départ Fibo.'
+                        : fibEndCandle == null
+                            ? '✨ Cliquez ou glissez pour définir l\'arrivée Fibo.'
+                            : 'Fibo actif (${fibPercentages.length} niveaux)',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange.shade900),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (fibStartCandle != null || fibEndCandle != null)
+                  IconButton(
+                    constraints: const BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                    icon: Icon(Icons.refresh, size: 16, color: Colors.orange.shade900),
+                    tooltip: "Réinitialiser les points Fibo",
+                    onPressed: () {
+                      setState(() {
+                        fibStartCandle = null;
+                        fibEndCandle = null;
+                      });
+                    },
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Boîte de dialogue pour les réglages avancés (Couleurs & Pourcentages Fibonacci / EMA)
+  void _showAdvancedIndicatorSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              backgroundColor: const Color(0xFFF2EFE9),
+              title: const Row(
+                children: [
+                  Icon(Icons.settings, color: Color(0xFF1B4332)),
+                  SizedBox(width: 10),
+                  Text(
+                    'Configuration Avancée',
+                    style: TextStyle(
+                      color: Color(0xFF1B4332),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (showEMA) ...[
+                      const Text(
+                        'Moyenne Mobile Exponentielle (EMA)',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332), fontSize: 13),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Période :', style: TextStyle(fontSize: 12)),
+                          DropdownButton<int>(
+                            value: emaPeriod,
+                            items: [9, 14, 20, 50, 100, 200].map((val) {
+                              return DropdownMenuItem(value: val, child: Text('$val'));
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                final currentData = generateMarketData(widget.commodityName, selectedPeriod);
+                                setDialogState(() {
+                                  emaPeriod = val;
+                                  if (currentData.length < emaPeriod) {
+                                    showEMA = false;
+                                  }
+                                });
+                                setState(() {
+                                  emaPeriod = val;
+                                  if (currentData.length < emaPeriod) {
+                                    showEMA = false;
+                                  }
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text('Couleur de la ligne EMA :', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        children: [Colors.blue, Colors.indigo, Colors.purple, Colors.teal, Colors.green].map((c) {
+                          return GestureDetector(
+                            onTap: () {
+                              setDialogState(() => emaColor = c);
+                              setState(() => emaColor = c);
+                            },
+                            child: Container(
+                              width: 26,
+                              height: 26,
+                              decoration: BoxDecoration(
+                                color: c,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: emaColor == c ? Colors.white : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const Divider(height: 20),
+                    ],
+                    if (showFibonacci) ...[
+                      const Text(
+                        'Retracements de Fibonacci',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332), fontSize: 13),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text('Pourcentages à afficher :', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0].map((p) {
+                          bool isSelected = fibPercentages.contains(p);
+                          String label = p == 0.0 ? '0%' : p == 1.0 ? '100%' : '${(p * 100).toStringAsFixed(1)}%';
+                          return FilterChip(
+                            label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : const Color(0xFF1B4332))),
+                            selected: isSelected,
+                            selectedColor: Colors.orange.shade700,
+                            backgroundColor: Colors.white,
+                            onSelected: (selected) {
+                              setDialogState(() {
+                                if (selected) {
+                                  if (!fibPercentages.contains(p)) {
+                                    fibPercentages.add(p);
+                                    fibPercentages.sort();
+                                  }
+                                } else {
+                                  if (fibPercentages.length > 2) {
+                                    fibPercentages.remove(p);
+                                  }
+                                }
+                              });
+                              setState(() {});
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('Couleur des lignes Fibonacci :', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        children: [Colors.orange, Colors.red, Colors.amber, Colors.deepOrange, Colors.pink].map((c) {
+                          return GestureDetector(
+                            onTap: () {
+                              setDialogState(() => fibColor = c);
+                              setState(() => fibColor = c);
+                            },
+                            child: Container(
+                              width: 26,
+                              height: 26,
+                              decoration: BoxDecoration(
+                                color: c,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: fibColor == c ? Colors.white : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    if (!showEMA && !showFibonacci)
+                      const Text('Aucun indicateur actif (EMA ou Fibonacci). Activez-les via l\'icône en haut de l\'écran.'),
+                  ],
+                ),
+              ),
+              actions: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1B4332),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Valider', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // BottomSheet pour activer/désactiver les indicateurs
+  void _showIndicatorsBottomSheet(BuildContext context) {
+    final rawData = generateMarketData(widget.commodityName, selectedPeriod);
+    bool hasEnoughCandles = rawData.length >= emaPeriod;
+
+    if (!hasEnoughCandles && showEMA) {
+      setState(() => showEMA = false);
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFFF2EFE9),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            final currentData = generateMarketData(widget.commodityName, selectedPeriod);
+            bool modalHasEnough = currentData.length >= emaPeriod;
+
+            return Container(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Indicateurs Techniques',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF1B4332),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  
+                  SwitchListTile(
+                    title: Text(
+                      'Moyenne Mobile Exponentielle (EMA $emaPeriod)',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold, 
+                        color: modalHasEnough ? const Color(0xFF1B4332) : Colors.grey,
+                      ),
+                    ),
+                    subtitle: !modalHasEnough 
+                        ? Text(
+                            'Indisponible : nécessite au moins $emaPeriod bougies (actuellement ${currentData.length}).',
+                            style: const TextStyle(color: Colors.red, fontSize: 11),
+                          )
+                        : null,
+                    value: modalHasEnough ? showEMA : false,
+                    activeThumbColor: const Color(0xFF1B4332),
+                    onChanged: modalHasEnough ? (bool value) {
+                      setModalState(() => showEMA = value);
+                      setState(() => showEMA = value);
+                    } : null,
+                  ),
+
+                  if (showEMA || !modalHasEnough) ...[
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Période de l\'EMA :',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1B4332),
+                              fontSize: 14,
+                            ),
+                          ),
+                          DropdownButton<int>(
+                            value: emaPeriod,
+                            dropdownColor: const Color(0xFFF2EFE9),
+                            items: [9, 14, 20, 50, 100, 200].map((int val) {
+                              return DropdownMenuItem<int>(
+                                value: val,
+                                child: Text(
+                                  '$val',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1B4332),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (int? newValue) {
+                              if (newValue != null) {
+                                setModalState(() {
+                                  emaPeriod = newValue;
+                                  if (currentData.length < emaPeriod) {
+                                    showEMA = false;
+                                  }
+                                });
+                                setState(() {
+                                  emaPeriod = newValue;
+                                  if (currentData.length < emaPeriod) {
+                                    showEMA = false;
+                                  }
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+
+                  const Divider(height: 20),
+
+                  SwitchListTile(
+                    title: const Text(
+                      'Retracements de Fibonacci',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332)),
+                    ),
+                    value: showFibonacci,
+                    activeThumbColor: const Color(0xFF1B4332),
+                    onChanged: (bool value) {
+                      setModalState(() => showFibonacci = value);
+                      setState(() {
+                        showFibonacci = value;
+                        _updateZoomPanBehavior();
+                        if (!value) {
+                          fibStartCandle = null;
+                          fibEndCandle = null;
+                        }
+                      });
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -131,6 +683,7 @@ class _ChartPageState extends State<ChartPage> {
     }
   }
 
+  // Boîte de dialogue pour ajouter une alerte
   void _showAlertDialog(BuildContext mainContext, double defaultPrice, UserDataProvider provider, List<Map<String, dynamic>> commodityAlerts) {
     final TextEditingController priceController = TextEditingController(
       text: defaultPrice.toStringAsFixed(2),
@@ -290,6 +843,109 @@ class _ChartPageState extends State<ChartPage> {
     );
   }
 
+  // Boîte de dialogue pour modifier une alerte existante
+  void _showEditAlertDialog(BuildContext mainContext, int globalIndex, double currentPrice, UserDataProvider provider) {
+    final TextEditingController priceController = TextEditingController(
+      text: currentPrice.toStringAsFixed(2),
+    );
+
+    showDialog(
+      context: mainContext,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: const Color(0xFFF2EFE9),
+          title: Row(
+            children: const [
+              Text('🔔', style: TextStyle(fontSize: 24)),
+              SizedBox(width: 10),
+              Text(
+                'Modifier l\'alerte',
+                style: TextStyle(
+                  color: Color(0xFF1B4332),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Modifiez le seuil de prix pour ${widget.commodityName} :',
+                style: TextStyle(
+                  color: const Color(0xFF1B4332).withValues(alpha: 0.8),
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: priceController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Seuil cible (\$)',
+                  labelStyle: const TextStyle(color: Color(0xFF1B4332)),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide(color: const Color(0xFF1B4332).withValues(alpha: 0.2)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: const BorderSide(color: Color(0xFF1B4332), width: 2),
+                  ),
+                ),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF1B4332),
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'Annuler',
+                style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.6)),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1B4332),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                final parsedPrice = double.tryParse(priceController.text.replaceAll(',', '.'));
+                if (parsedPrice != null) {
+                  Navigator.pop(dialogContext);
+                  provider.removeAlert(globalIndex);
+                  provider.addAlert(widget.commodityName, parsedPrice);
+                  ScaffoldMessenger.of(mainContext).showSnackBar(
+                    SnackBar(
+                      content: Text('Alerte modifiée : ${widget.commodityName} > ${parsedPrice.toStringAsFixed(2)} \$'),
+                      backgroundColor: const Color(0xFF1B4332),
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Confirmer', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<UserDataProvider>();
@@ -303,7 +959,6 @@ class _ChartPageState extends State<ChartPage> {
     final firstPrice = rawData.first.open;
     final diff = ((displayCandle.close - firstPrice) / firstPrice) * 100;
 
-    // --- AUTO-SCALE INTELLIGENT SELON LA PÉRIODE ---
     double yMin = rawData.map((e) => e.low).reduce((a, b) => a < b ? a : b);
     double yMax = rawData.map((e) => e.high).reduce((a, b) => a > b ? a : b);
 
@@ -333,6 +988,14 @@ class _ChartPageState extends State<ChartPage> {
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.insights_rounded, color: Color(0xFF1B4332), size: 24),
+            tooltip: "Indicateurs techniques",
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              _showIndicatorsBottomSheet(context);
+            },
+          ),
+          IconButton(
             icon: const Text('⛶', style: TextStyle(fontSize: 22, color: Color(0xFF1B4332), fontWeight: FontWeight.bold)),
             tooltip: "Plein écran paysage",
             onPressed: () {
@@ -353,7 +1016,9 @@ class _ChartPageState extends State<ChartPage> {
             icon: const Icon(Icons.share_rounded, color: Color(0xFF1B4332), size: 26),
             onPressed: () async {
               HapticFeedback.lightImpact();
-              await Share.share('Regarde l\'évolution du cours pour : ${widget.commodityName}');
+              await SharePlus.instance.share(
+                ShareParams(text: 'Regarde l\'évolution du cours pour : ${widget.commodityName}'),
+              );
             },
           ),
           ValueListenableBuilder<bool>(
@@ -381,8 +1046,8 @@ class _ChartPageState extends State<ChartPage> {
             _buildPriceHeader(displayCandle.close, diff, provider, commodityAlerts),
             _buildViewToggle(),
             _buildPeriodSelector(),
+            _buildIndicatorControlBlock(), // Bloc avec rouage sous le graphique pour gérer EMA / Fibonacci
 
-            // Zone du graphique
             Container(
               height: 420,
               margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -393,100 +1058,211 @@ class _ChartPageState extends State<ChartPage> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(25),
-                child: SfCartesianChart(
-                  zoomPanBehavior: _zoomPanBehavior, // <-- ZOOM ET PAN ACTIVÉS ICI
-                  trackballBehavior: TrackballBehavior(
-                    enable: true,
-                    activationMode: ActivationMode.singleTap,
-                    lineColor: Colors.blueGrey.withValues(alpha: 0.5), 
-                    lineWidth: 1.5, 
-                    lineDashArray: const [5, 5], 
-                    markerSettings: const TrackballMarkerSettings(
-                      markerVisibility: TrackballVisibilityMode.visible,
-                      color: Colors.white,
-                      borderColor: Colors.blueGrey,
-                      borderWidth: 2,
-                      height: 8,
-                      width: 8,
-                    ),
-                    tooltipDisplayMode: TrackballDisplayMode.floatAllPoints,
-                  ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    double plotWidth = constraints.maxWidth - 70; // Déduction des marges axes
 
-                  primaryXAxis: DateTimeAxis(
-                    majorGridLines: const MajorGridLines(width: 0), 
-                    axisLine: const AxisLine(width: 1, color: Colors.grey),
-                  ),
-                  primaryYAxis: NumericAxis(
-                    minimum: chartMin,
-                    maximum: chartMax,
-                    majorGridLines: const MajorGridLines(width: 0.5, color: Colors.black12), 
-                    axisLine: const AxisLine(width: 0), 
-                    plotBands: activeAlertPrices.map((price) {
-                      return PlotBand(
-                        start: price,
-                        end: price,
-                        borderColor: Colors.grey.shade500,
-                        borderWidth: 1.5,
-                        dashArray: const [3, 3],
-                        text: '${price.toStringAsFixed(2)} \$',
-                        textStyle: TextStyle(
-                          color: Colors.grey.shade700,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                        ),
-                        horizontalTextAlignment: _getHorizontalAlignment(price, rawData),
-                        verticalTextAlignment: price >= midPrice ? TextAnchor.end : TextAnchor.start,
-                      );
-                    }).toList(),
-                  ),
-
-                  series: isCandleView
-                      ? <CartesianSeries<CandleData, DateTime>>[
-                          CandleSeries<CandleData, DateTime>(
-                            dataSource: rawData,
-                            bearColor: const Color(0xFFE53935), 
-                            bullColor: const Color(0xFF43A047), 
-                            enableSolidCandles: true,
-                            xValueMapper: (data, _) => data.date,
-                            lowValueMapper: (data, _) => data.low,
-                            highValueMapper: (data, _) => data.high,
-                            openValueMapper: (data, _) => data.open,
-                            closeValueMapper: (data, _) => data.close,
-                            onPointTap: (ChartPointDetails details) {
-                              if (details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
-                                setState(() {
-                                  selectedCandle = rawData[details.pointIndex!];
-                                });
-                                HapticFeedback.selectionClick();
-                              }
-                            },
-                          ),
-                        ]
-                      : <CartesianSeries<CandleData, DateTime>>[
-                          FastLineSeries<CandleData, DateTime>(
-                            dataSource: rawData,
-                            xValueMapper: (data, _) => data.date,
-                            yValueMapper: (data, _) => data.close,
-                            color: const Color(0xFF1B4332),
-                            width: 2,
-                            markerSettings: MarkerSettings(
-                              isVisible: selectedPeriod == "1D" || selectedPeriod == "1W",
-                              height: 5,
-                              width: 5,
-                              color: const Color(0xFF1B4332),
-                              borderColor: Colors.white,
-                              borderWidth: 1,
+                    return GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTapUp: (details) {
+                        if (!showFibonacci) return;
+                        double localX = details.localPosition.dx - 50;
+                        double t = (localX / plotWidth).clamp(0.0, 1.0);
+                        int index = (t * (rawData.length - 1)).round();
+                        if (index >= 0 && index < rawData.length) {
+                          setState(() {
+                            if (fibStartCandle == null) {
+                              fibStartCandle = rawData[index];
+                              fibEndCandle = null;
+                            } else if (fibEndCandle == null) {
+                              fibEndCandle = rawData[index];
+                            } else {
+                              fibStartCandle = rawData[index];
+                              fibEndCandle = null;
+                            }
+                          });
+                          HapticFeedback.selectionClick();
+                        }
+                      },
+                      onPanStart: (details) {
+                        if (!showFibonacci) return;
+                        double localX = details.localPosition.dx - 50;
+                        double t = (localX / plotWidth).clamp(0.0, 1.0);
+                        int index = (t * (rawData.length - 1)).round();
+                        if (index >= 0 && index < rawData.length) {
+                          setState(() {
+                            if (fibStartCandle == null) {
+                              fibStartCandle = rawData[index];
+                              fibEndCandle = null;
+                            } else {
+                              fibEndCandle = rawData[index];
+                            }
+                          });
+                          HapticFeedback.selectionClick();
+                        }
+                      },
+                      onPanUpdate: (details) {
+                        if (!showFibonacci || fibStartCandle == null) return;
+                        double localX = details.localPosition.dx - 50;
+                        double t = (localX / plotWidth).clamp(0.0, 1.0);
+                        int index = (t * (rawData.length - 1)).round();
+                        if (index >= 0 && index < rawData.length) {
+                          setState(() {
+                            fibEndCandle = rawData[index];
+                          });
+                        }
+                      },
+                      onPanEnd: (_) {
+                        if (showFibonacci && fibStartCandle != null && fibEndCandle != null) {
+                          HapticFeedback.mediumImpact();
+                        }
+                      },
+                      child: Stack(
+                        children: [
+                          SfCartesianChart(
+                            zoomPanBehavior: _zoomPanBehavior,
+                            trackballBehavior: TrackballBehavior(
+                              enable: true,
+                              activationMode: ActivationMode.singleTap,
+                              lineColor: Colors.blueGrey.withValues(alpha: 0.5), 
+                              lineWidth: 1.5, 
+                              lineDashArray: const [5, 5], 
+                              markerSettings: const TrackballMarkerSettings(
+                                markerVisibility: TrackballVisibilityMode.visible,
+                                color: Colors.white,
+                                borderColor: Colors.blueGrey,
+                                borderWidth: 2,
+                                height: 8,
+                                width: 8,
+                              ),
+                              tooltipDisplayMode: TrackballDisplayMode.floatAllPoints,
                             ),
-                            onPointTap: (ChartPointDetails details) {
-                              if (details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
+                            primaryXAxis: DateTimeAxis(
+                              majorGridLines: const MajorGridLines(width: 0), 
+                              axisLine: const AxisLine(width: 1, color: Colors.grey),
+                            ),
+                            primaryYAxis: NumericAxis(
+                              minimum: _manualYMin ?? chartMin,
+                              maximum: _manualYMax ?? chartMax,
+                              majorGridLines: const MajorGridLines(width: 0.5, color: Colors.black12), 
+                              axisLine: const AxisLine(width: 0), 
+                              plotBands: [
+                                ...activeAlertPrices.map((price) {
+                                  return PlotBand(
+                                    start: price,
+                                    end: price,
+                                    borderColor: Colors.grey.shade500,
+                                    borderWidth: 1.5,
+                                    dashArray: const [3, 3],
+                                    text: '${price.toStringAsFixed(2)} \$',
+                                    textStyle: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                    horizontalTextAlignment: _getHorizontalAlignment(price, rawData),
+                                    verticalTextAlignment: price >= midPrice ? TextAnchor.end : TextAnchor.start,
+                                  );
+                                }),
+                                ..._getFibonacciPlotBands(rawData),
+                              ],
+                            ),
+                            indicators: showEMA && rawData.length >= emaPeriod
+                                ? <TechnicalIndicator<CandleData, DateTime>>[
+                                    EmaIndicator<CandleData, DateTime>(
+                                      dataSource: rawData,
+                                      xValueMapper: (CandleData data, _) => data.date,
+                                      closeValueMapper: (CandleData data, _) => data.close,
+                                      period: emaPeriod,
+                                      isVisible: true,
+                                      animationDuration: 0,
+                                      name: 'EMA',
+                                      signalLineColor: emaColor,
+                                      signalLineWidth: 2,
+                                    ),
+                                  ]
+                                : [],
+                            series: isCandleView
+                                ? <CartesianSeries<CandleData, DateTime>>[
+                                    CandleSeries<CandleData, DateTime>(
+                                      dataSource: rawData,
+                                      bearColor: const Color(0xFFE53935), 
+                                      bullColor: const Color(0xFF43A047), 
+                                      enableSolidCandles: true,
+                                      xValueMapper: (data, _) => data.date,
+                                      lowValueMapper: (data, _) => data.low,
+                                      highValueMapper: (data, _) => data.high,
+                                      openValueMapper: (data, _) => data.open,
+                                      closeValueMapper: (data, _) => data.close,
+                                      onPointTap: (ChartPointDetails details) {
+                                        if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
+                                          setState(() {
+                                            selectedCandle = rawData[details.pointIndex!];
+                                          });
+                                          HapticFeedback.selectionClick();
+                                        }
+                                      },
+                                    ),
+                                  ]
+                                : <CartesianSeries<CandleData, DateTime>>[
+                                    FastLineSeries<CandleData, DateTime>(
+                                      dataSource: rawData,
+                                      xValueMapper: (data, _) => data.date,
+                                      yValueMapper: (data, _) => data.close,
+                                      color: const Color(0xFF1B4332),
+                                      width: 2,
+                                      markerSettings: MarkerSettings(
+                                        isVisible: selectedPeriod == "1D" || selectedPeriod == "1W",
+                                        height: 5,
+                                        width: 5,
+                                        color: const Color(0xFF1B4332),
+                                        borderColor: Colors.white,
+                                        borderWidth: 1,
+                                      ),
+                                      onPointTap: (ChartPointDetails details) {
+                                        if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
+                                          setState(() {
+                                            selectedCandle = rawData[details.pointIndex!];
+                                          });
+                                          HapticFeedback.selectionClick();
+                                        }
+                                      },
+                                    ),
+                                  ],
+                          ),
+                          Positioned(
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: 50,
+                            child: GestureDetector(
+                              onVerticalDragStart: (details) {
+                                _lastYDragPosition = details.localPosition.dy;
+                              },
+                              onVerticalDragUpdate: (details) {
+                                if (_lastYDragPosition != null) {
+                                  double delta = details.localPosition.dy - _lastYDragPosition!;
+                                  _lastYDragPosition = details.localPosition.dy;
+                                  _handleYAxisDrag(delta, 420, chartMin, chartMax); 
+                                }
+                              },
+                              onVerticalDragEnd: (_) {
+                                _lastYDragPosition = null;
+                              },
+                              onDoubleTap: () {
+                                HapticFeedback.mediumImpact();
                                 setState(() {
-                                  selectedCandle = rawData[details.pointIndex!];
+                                  _manualYMin = null;
+                                  _manualYMax = null;
                                 });
-                                HapticFeedback.selectionClick();
-                              }
-                            },
+                              },
+                              child: Container(color: Colors.transparent),
+                            ),
                           ),
                         ],
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -604,16 +1380,44 @@ class _ChartPageState extends State<ChartPage> {
                         ),
                       ],
                     ),
-                    IconButton(
-                      constraints: const BoxConstraints(),
-                      padding: EdgeInsets.zero,
-                      icon: Icon(Icons.delete_outline_rounded, size: 20, color: Colors.red.shade400),
-                      onPressed: () {
-                        HapticFeedback.lightImpact();
-                        if (globalIndex != -1) {
-                          provider.removeAlert(globalIndex);
-                        }
-                      },
+                    Row(
+                      children: [
+                        // Bouton Modifier
+                        IconButton(
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
+                          icon: Icon(Icons.edit_outlined, size: 20, color: const Color(0xFF1B4332).withValues(alpha: 0.7)),
+                          tooltip: 'Modifier l\'alerte',
+                          onPressed: () {
+                            HapticFeedback.lightImpact();
+                            if (globalIndex != -1) {
+                              _showEditAlertDialog(context, globalIndex, alertPrice, provider);
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        // Bouton Supprimer
+                        IconButton(
+                          constraints: const BoxConstraints(),
+                          padding: EdgeInsets.zero,
+                          icon: Icon(Icons.delete_outline_rounded, size: 20, color: Colors.red.shade400),
+                          tooltip: 'Supprimer l\'alerte',
+                          onPressed: () {
+                            HapticFeedback.lightImpact();
+                            if (globalIndex != -1) {
+                              provider.removeAlert(globalIndex);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Alerte supprimée : ${widget.commodityName} > ${alertPrice.toStringAsFixed(2)} \$'),
+                                  backgroundColor: const Color(0xFF1B4332),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -991,6 +1795,15 @@ class _ChartPageState extends State<ChartPage> {
             selectedPeriod = period;
             lastUpdateTime = DateTime.now();
             selectedCandle = null; 
+            _manualYMin = null; 
+            _manualYMax = null; 
+            fibStartCandle = null;
+            fibEndCandle = null;
+
+            final newData = generateMarketData(widget.commodityName, selectedPeriod);
+            if (showEMA && newData.length < emaPeriod) {
+              showEMA = false;
+            }
           });
         },
         child: AnimatedContainer(
@@ -1064,10 +1877,26 @@ class FullScreenChartPage extends StatefulWidget {
 
 class _FullScreenChartPageState extends State<FullScreenChartPage> {
   late String selectedPeriod;
-  bool isCandleView = false; // <-- Vue courbe par défaut en plein écran aussi
+  bool isCandleView = false;
   CandleData? selectedCandle;
   final List<String> periods = ["1D", "1W", "1M", "3M", "1Y"];
   late ZoomPanBehavior _zoomPanBehavior;
+  
+  double? _manualYMin;
+  double? _manualYMax;
+  double? _lastYDragPosition;
+
+  // États pour les indicateurs techniques
+  bool showEMA = false;
+  bool showFibonacci = false;
+  int emaPeriod = 20;
+  Color emaColor = Colors.blue;
+
+  // États pour le Fibonacci personnalisé en plein écran
+  CandleData? fibStartCandle;
+  CandleData? fibEndCandle;
+  List<double> fibPercentages = [0.0, 0.236, 0.382, 0.5, 0.618, 1.0];
+  Color fibColor = Colors.orange;
 
   @override
   void initState() {
@@ -1076,10 +1905,10 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
     
     _zoomPanBehavior = ZoomPanBehavior(
       enablePinching: true,
-      enablePanning: true,
+      enablePanning: !showFibonacci,
       enableDoubleTapZooming: true,
-      enableSelectionZooming: true, // <-- Ajouté également en plein écran
-      zoomMode: ZoomMode.xy,
+      enableSelectionZooming: true,
+      zoomMode: ZoomMode.x,
     );
     
     AuthLock.isFullScreenActive = true;
@@ -1102,6 +1931,473 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  void _updateZoomPanBehavior() {
+    setState(() {
+      _zoomPanBehavior = ZoomPanBehavior(
+        enablePinching: true,
+        enablePanning: !showFibonacci,
+        enableDoubleTapZooming: true,
+        enableSelectionZooming: true,
+        zoomMode: ZoomMode.x,
+      );
+    });
+  }
+
+  void _handleYAxisDrag(double delta, double chartHeight, double chartMinVal, double chartMaxVal) {
+    setState(() {
+      if (_manualYMin == null || _manualYMax == null) {
+        _manualYMin = chartMinVal;
+        _manualYMax = chartMaxVal;
+      }
+      double range = _manualYMax! - _manualYMin!;
+      double center = (_manualYMin! + _manualYMax!) / 2;
+      
+      double factor = delta / chartHeight;
+      double newRange = range * (1 + factor * 2);
+      
+      if (newRange > 0.01) {
+        _manualYMin = center - newRange / 2;
+        _manualYMax = center + newRange / 2;
+      }
+    });
+  }
+
+  List<PlotBand> _getFibonacciPlotBands(List<CandleData> data) {
+    if (!showFibonacci || data.isEmpty || fibStartCandle == null) return [];
+    
+    if (fibStartCandle != null && fibEndCandle == null) {
+      double refPrice = fibStartCandle!.close;
+      return [
+        PlotBand(
+          start: refPrice,
+          end: refPrice,
+          borderColor: fibColor,
+          borderWidth: 1.5,
+          dashArray: const [3, 3],
+          text: 'Référence (${refPrice.toStringAsFixed(2)} \$)',
+          textStyle: TextStyle(
+            color: fibColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+          ),
+          horizontalTextAlignment: TextAnchor.end,
+        ),
+      ];
+    }
+
+    double p1 = fibStartCandle!.close;
+    double p2 = fibEndCandle!.close;
+    double high = p1 > p2 ? p1 : p2;
+    double low = p1 > p2 ? p2 : p1;
+    
+    double diff = high - low;
+
+    List<PlotBand> bands = [];
+    for (var p in fibPercentages) {
+      double val = high - diff * p;
+      String label = p == 0.0 
+          ? 'Fibo 0% (${high.toStringAsFixed(2)})'
+          : p == 1.0 
+              ? 'Fibo 100% (${low.toStringAsFixed(2)})'
+              : 'Fibo ${(p * 100).toStringAsFixed(1)}%';
+      bands.add(
+        PlotBand(
+          start: val,
+          end: val,
+          borderColor: fibColor,
+          borderWidth: 1.2,
+          dashArray: const [4, 4],
+          text: label,
+          textStyle: TextStyle(
+            color: fibColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+          ),
+          horizontalTextAlignment: TextAnchor.end,
+        ),
+      );
+    }
+    return bands;
+  }
+
+  Widget _buildFullScreenIndicatorControlBlock() {
+    if (!showEMA && !showFibonacci) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF1B4332).withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.settings, size: 14, color: Color(0xFF1B4332)),
+              const SizedBox(width: 6),
+              Text(
+                showEMA && showFibonacci 
+                    ? 'EMA: $emaPeriod | Fibo actif' 
+                    : showEMA 
+                        ? 'EMA Période: $emaPeriod' 
+                        : fibStartCandle == null 
+                            ? 'Cliquez pour placer le départ Fibo' 
+                            : 'Fibo actif (${fibPercentages.length} niveaux)',
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF1B4332)),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              if (showFibonacci && (fibStartCandle != null || fibEndCandle != null))
+                IconButton(
+                  constraints: const BoxConstraints(),
+                  padding: EdgeInsets.zero,
+                  icon: Icon(Icons.refresh, size: 14, color: Colors.orange.shade900),
+                  tooltip: "Réinitialiser Fibo",
+                  onPressed: () {
+                    setState(() {
+                      fibStartCandle = null;
+                      fibEndCandle = null;
+                    });
+                  },
+                ),
+              const SizedBox(width: 6),
+              IconButton(
+                constraints: const BoxConstraints(),
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.tune, size: 14, color: Color(0xFF1B4332)),
+                tooltip: 'Paramètres',
+                onPressed: () => _showAdvancedIndicatorSettingsDialog(context),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAdvancedIndicatorSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              backgroundColor: const Color(0xFFF2EFE9),
+              title: const Row(
+                children: [
+                  Icon(Icons.settings, color: Color(0xFF1B4332)),
+                  SizedBox(width: 10),
+                  Text(
+                    'Configuration Avancée',
+                    style: TextStyle(
+                      color: Color(0xFF1B4332),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (showEMA) ...[
+                      const Text(
+                        'Moyenne Mobile Exponentielle (EMA)',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332), fontSize: 13),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Période :', style: TextStyle(fontSize: 12)),
+                          DropdownButton<int>(
+                            value: emaPeriod,
+                            items: [9, 14, 20, 50, 100, 200].map((val) {
+                              return DropdownMenuItem(value: val, child: Text('$val'));
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                final currentData = generateMarketData(widget.commodityName, selectedPeriod);
+                                setDialogState(() {
+                                  emaPeriod = val;
+                                  if (currentData.length < emaPeriod) {
+                                    showEMA = false;
+                                  }
+                                });
+                                setState(() {
+                                  emaPeriod = val;
+                                  if (currentData.length < emaPeriod) {
+                                    showEMA = false;
+                                  }
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text('Couleur de la ligne EMA :', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        children: [Colors.blue, Colors.indigo, Colors.purple, Colors.teal, Colors.green].map((c) {
+                          return GestureDetector(
+                            onTap: () {
+                              setDialogState(() => emaColor = c);
+                              setState(() => emaColor = c);
+                            },
+                            child: Container(
+                              width: 26,
+                              height: 26,
+                              decoration: BoxDecoration(
+                                color: c,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: emaColor == c ? Colors.white : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const Divider(height: 20),
+                    ],
+                    if (showFibonacci) ...[
+                      const Text(
+                        'Retracements de Fibonacci',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332), fontSize: 13),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text('Pourcentages à afficher :', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0].map((p) {
+                          bool isSelected = fibPercentages.contains(p);
+                          String label = p == 0.0 ? '0%' : p == 1.0 ? '100%' : '${(p * 100).toStringAsFixed(1)}%';
+                          return FilterChip(
+                            label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : const Color(0xFF1B4332))),
+                            selected: isSelected,
+                            selectedColor: Colors.orange.shade700,
+                            backgroundColor: Colors.white,
+                            onSelected: (selected) {
+                              setDialogState(() {
+                                if (selected) {
+                                  if (!fibPercentages.contains(p)) {
+                                    fibPercentages.add(p);
+                                    fibPercentages.sort();
+                                  }
+                                } else {
+                                  if (fibPercentages.length > 2) {
+                                    fibPercentages.remove(p);
+                                  }
+                                }
+                              });
+                              setState(() {});
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('Couleur des lignes Fibonacci :', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 8,
+                        children: [Colors.orange, Colors.red, Colors.amber, Colors.deepOrange, Colors.pink].map((c) {
+                          return GestureDetector(
+                            onTap: () {
+                              setDialogState(() => fibColor = c);
+                              setState(() => fibColor = c);
+                            },
+                            child: Container(
+                              width: 26,
+                              height: 26,
+                              decoration: BoxDecoration(
+                                color: c,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: fibColor == c ? Colors.white : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                    if (!showEMA && !showFibonacci)
+                      const Text('Aucun indicateur actif (EMA ou Fibonacci). Activez-les via l\'icône en haut de l\'écran.'),
+                  ],
+                ),
+              ),
+              actions: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1B4332),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Valider', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showIndicatorsBottomSheet(BuildContext context) {
+    final rawData = generateMarketData(widget.commodityName, selectedPeriod);
+    bool hasEnoughCandles = rawData.length >= emaPeriod;
+
+    if (!hasEnoughCandles && showEMA) {
+      setState(() => showEMA = false);
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFFF2EFE9),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            final currentData = generateMarketData(widget.commodityName, selectedPeriod);
+            bool modalHasEnough = currentData.length >= emaPeriod;
+
+            return Container(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Indicateurs Techniques',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF1B4332),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  
+                  SwitchListTile(
+                    title: Text(
+                      'Moyenne Mobile Exponentielle (EMA $emaPeriod)',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold, 
+                        color: modalHasEnough ? const Color(0xFF1B4332) : Colors.grey,
+                      ),
+                    ),
+                    subtitle: !modalHasEnough 
+                        ? Text(
+                            'Indisponible : nécessite au moins $emaPeriod bougies (actuellement ${currentData.length}).',
+                            style: const TextStyle(color: Colors.red, fontSize: 11),
+                          )
+                        : null,
+                    value: modalHasEnough ? showEMA : false,
+                    activeThumbColor: const Color(0xFF1B4332),
+                    onChanged: modalHasEnough ? (bool value) {
+                      setModalState(() => showEMA = value);
+                      setState(() => showEMA = value);
+                    } : null,
+                  ),
+
+                  if (showEMA || !modalHasEnough) ...[
+                    const SizedBox(height: 5),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Période de l\'EMA :',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1B4332),
+                              fontSize: 14,
+                            ),
+                          ),
+                          DropdownButton<int>(
+                            value: emaPeriod,
+                            dropdownColor: const Color(0xFFF2EFE9),
+                            items: [9, 14, 20, 50, 100, 200].map((int val) {
+                              return DropdownMenuItem<int>(
+                                value: val,
+                                child: Text(
+                                  '$val',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1B4332),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (int? newValue) {
+                              if (newValue != null) {
+                                setModalState(() {
+                                  emaPeriod = newValue;
+                                  if (currentData.length < emaPeriod) {
+                                    showEMA = false;
+                                  }
+                                });
+                                setState(() {
+                                  emaPeriod = newValue;
+                                  if (currentData.length < emaPeriod) {
+                                    showEMA = false;
+                                  }
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+
+                  const Divider(height: 20),
+
+                  SwitchListTile(
+                    title: const Text(
+                      'Retracements de Fibonacci',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332)),
+                    ),
+                    value: showFibonacci,
+                    activeThumbColor: const Color(0xFF1B4332),
+                    onChanged: (bool value) {
+                      setModalState(() => showFibonacci = value);
+                      setState(() {
+                        showFibonacci = value;
+                        _updateZoomPanBehavior();
+                        if (!value) {
+                          fibStartCandle = null;
+                          fibEndCandle = null;
+                        }
+                      });
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   TextAnchor _getHorizontalAlignment(double price, List<CandleData> data) {
@@ -1299,6 +2595,15 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
         setState(() {
           selectedPeriod = period;
           selectedCandle = null;
+          _manualYMin = null; 
+          _manualYMax = null; 
+          fibStartCandle = null;
+          fibEndCandle = null;
+
+          final newData = generateMarketData(widget.commodityName, selectedPeriod);
+          if (showEMA && newData.length < emaPeriod) {
+            showEMA = false;
+          }
         });
       },
       child: Container(
@@ -1354,7 +2659,6 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
 
     final rawData = generateMarketData(widget.commodityName, selectedPeriod);
 
-    // --- AUTO-SCALE PLEIN ÉCRAN SELON LA PÉRIODE ---
     double yMin = rawData.map((e) => e.low).reduce((a, b) => a < b ? a : b);
     double yMax = rawData.map((e) => e.high).reduce((a, b) => a > b ? a : b);
 
@@ -1376,7 +2680,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -1434,14 +2738,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                         tooltip: "Indicateurs techniques",
                         onPressed: () {
                           HapticFeedback.lightImpact();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text('Indicateurs techniques : Bientôt disponible'),
-                              backgroundColor: const Color(0xFF1B4332),
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                          );
+                          _showIndicatorsBottomSheet(context);
                         },
                       ),
                       IconButton(
@@ -1478,9 +2775,10 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                 ],
               ),
             ),
+            _buildFullScreenIndicatorControlBlock(), // Bloc avec rouage plein écran
             Expanded(
               child: Container(
-                margin: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                margin: const EdgeInsets.fromLTRB(20, 2, 20, 4),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
@@ -1488,98 +2786,211 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(20),
-                  child: SfCartesianChart(
-                    zoomPanBehavior: _zoomPanBehavior, // <-- ZOOM ET PAN ACTIVÉS ICI AUSSI
-                    trackballBehavior: TrackballBehavior(
-                      enable: true,
-                      activationMode: ActivationMode.singleTap,
-                      lineColor: Colors.blueGrey.withValues(alpha: 0.5),
-                      lineWidth: 1.5,
-                      lineDashArray: const [5, 5],
-                      markerSettings: const TrackballMarkerSettings(
-                        markerVisibility: TrackballVisibilityMode.visible,
-                        color: Colors.white,
-                        borderColor: Colors.blueGrey,
-                        borderWidth: 2,
-                        height: 8,
-                        width: 8,
-                      ),
-                      tooltipDisplayMode: TrackballDisplayMode.floatAllPoints,
-                    ),
-                    primaryXAxis: DateTimeAxis(
-                      majorGridLines: const MajorGridLines(width: 0),
-                      axisLine: const AxisLine(width: 1, color: Colors.grey),
-                    ),
-                    primaryYAxis: NumericAxis(
-                      minimum: chartMin,
-                      maximum: chartMax,
-                      majorGridLines: const MajorGridLines(width: 0.5, color: Colors.black12),
-                      axisLine: const AxisLine(width: 0),
-                      plotBands: activeAlertPrices.map((price) {
-                        return PlotBand(
-                          start: price,
-                          end: price,
-                          borderColor: Colors.grey.shade500,
-                          borderWidth: 1.5,
-                          dashArray: const [3, 3],
-                          text: '${price.toStringAsFixed(2)} \$',
-                          textStyle: TextStyle(
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                          ),
-                          horizontalTextAlignment: _getHorizontalAlignment(price, rawData),
-                          verticalTextAlignment: price >= midPrice ? TextAnchor.end : TextAnchor.start,
-                        );
-                      }).toList(),
-                    ),
-                    series: isCandleView
-                        ? <CartesianSeries<CandleData, DateTime>>[
-                            CandleSeries<CandleData, DateTime>(
-                              dataSource: rawData,
-                              bearColor: const Color(0xFFE53935),
-                              bullColor: const Color(0xFF43A047),
-                              enableSolidCandles: true,
-                              xValueMapper: (data, _) => data.date,
-                              lowValueMapper: (data, _) => data.low,
-                              highValueMapper: (data, _) => data.high,
-                              openValueMapper: (data, _) => data.open,
-                              closeValueMapper: (data, _) => data.close,
-                              onPointTap: (ChartPointDetails details) {
-                                if (details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
-                                  setState(() {
-                                    selectedCandle = rawData[details.pointIndex!];
-                                  });
-                                  HapticFeedback.selectionClick();
-                                }
-                              },
-                            ),
-                          ]
-                        : <CartesianSeries<CandleData, DateTime>>[
-                            FastLineSeries<CandleData, DateTime>(
-                              dataSource: rawData,
-                              xValueMapper: (data, _) => data.date,
-                              yValueMapper: (data, _) => data.close,
-                              color: const Color(0xFF1B4332),
-                              width: 2,
-                              markerSettings: MarkerSettings(
-                                isVisible: selectedPeriod == "1D" || selectedPeriod == "1W",
-                                height: 5,
-                                width: 5,
-                                color: const Color(0xFF1B4332),
-                                borderColor: Colors.white,
-                                borderWidth: 1,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      double plotWidth = constraints.maxWidth - 70;
+
+                      return GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTapUp: (details) {
+                          if (!showFibonacci) return;
+                          double localX = details.localPosition.dx - 50;
+                          double t = (localX / plotWidth).clamp(0.0, 1.0);
+                          int index = (t * (rawData.length - 1)).round();
+                          if (index >= 0 && index < rawData.length) {
+                            setState(() {
+                              if (fibStartCandle == null) {
+                                fibStartCandle = rawData[index];
+                                fibEndCandle = null;
+                              } else if (fibEndCandle == null) {
+                                fibEndCandle = rawData[index];
+                              } else {
+                                fibStartCandle = rawData[index];
+                                fibEndCandle = null;
+                              }
+                            });
+                            HapticFeedback.selectionClick();
+                          }
+                        },
+                        onPanStart: (details) {
+                          if (!showFibonacci) return;
+                          double localX = details.localPosition.dx - 50;
+                          double t = (localX / plotWidth).clamp(0.0, 1.0);
+                          int index = (t * (rawData.length - 1)).round();
+                          if (index >= 0 && index < rawData.length) {
+                            setState(() {
+                              if (fibStartCandle == null) {
+                                fibStartCandle = rawData[index];
+                                fibEndCandle = null;
+                              } else {
+                                fibEndCandle = rawData[index];
+                              }
+                            });
+                            HapticFeedback.selectionClick();
+                          }
+                        },
+                        onPanUpdate: (details) {
+                          if (!showFibonacci || fibStartCandle == null) return;
+                          double localX = details.localPosition.dx - 50;
+                          double t = (localX / plotWidth).clamp(0.0, 1.0);
+                          int index = (t * (rawData.length - 1)).round();
+                          if (index >= 0 && index < rawData.length) {
+                            setState(() {
+                              fibEndCandle = rawData[index];
+                            });
+                          }
+                        },
+                        onPanEnd: (_) {
+                          if (showFibonacci && fibStartCandle != null && fibEndCandle != null) {
+                            HapticFeedback.mediumImpact();
+                          }
+                        },
+                        child: Stack(
+                          children: [
+                            SfCartesianChart(
+                              zoomPanBehavior: _zoomPanBehavior,
+                              trackballBehavior: TrackballBehavior(
+                                enable: true,
+                                activationMode: ActivationMode.singleTap,
+                                lineColor: Colors.blueGrey.withValues(alpha: 0.5),
+                                lineWidth: 1.5,
+                                lineDashArray: const [5, 5],
+                                markerSettings: const TrackballMarkerSettings(
+                                  markerVisibility: TrackballVisibilityMode.visible,
+                                  color: Colors.white,
+                                  borderColor: Colors.blueGrey,
+                                  borderWidth: 2,
+                                  height: 8,
+                                  width: 8,
+                                ),
+                                tooltipDisplayMode: TrackballDisplayMode.floatAllPoints,
                               ),
-                              onPointTap: (ChartPointDetails details) {
-                                if (details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
-                                  setState(() {
-                                    selectedCandle = rawData[details.pointIndex!];
-                                  });
-                                  HapticFeedback.selectionClick();
-                                }
-                              },
+                              primaryXAxis: DateTimeAxis(
+                                majorGridLines: const MajorGridLines(width: 0),
+                                axisLine: const AxisLine(width: 1, color: Colors.grey),
+                              ),
+                              primaryYAxis: NumericAxis(
+                                minimum: _manualYMin ?? chartMin,
+                                maximum: _manualYMax ?? chartMax,
+                                majorGridLines: const MajorGridLines(
+                                  width: 0.5,
+                                  color: Colors.black12,
+                                ),
+                                axisLine: const AxisLine(width: 0),
+                                plotBands: [
+                                  ...activeAlertPrices.map((price) {
+                                    return PlotBand(
+                                      start: price,
+                                      end: price,
+                                      borderColor: Colors.grey.shade500,
+                                      borderWidth: 1.5,
+                                      dashArray: const [3, 3],
+                                      text: '${price.toStringAsFixed(2)} \$',
+                                      textStyle: TextStyle(
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                      horizontalTextAlignment:
+                                          _getHorizontalAlignment(price, rawData),
+                                      verticalTextAlignment:
+                                          price >= midPrice
+                                              ? TextAnchor.end
+                                              : TextAnchor.start,
+                                    );
+                                  }),
+                                  ..._getFibonacciPlotBands(rawData),
+                                ],
+                              ),
+                              indicators: showEMA && rawData.length >= emaPeriod
+                                  ? <TechnicalIndicator<CandleData, DateTime>>[
+                                      EmaIndicator<CandleData, DateTime>(
+                                        dataSource: rawData,
+                                        xValueMapper: (CandleData data, _) => data.date,
+                                        closeValueMapper: (CandleData data, _) => data.close,
+                                        period: emaPeriod,
+                                        isVisible: true,
+                                        animationDuration: 0,
+                                        name: 'EMA',
+                                        signalLineColor: emaColor,
+                                        signalLineWidth: 2,
+                                      ),
+                                    ]
+                                  : [],
+                              series: isCandleView
+                                  ? <CartesianSeries<CandleData, DateTime>>[
+                                      CandleSeries<CandleData, DateTime>(
+                                        dataSource: rawData,
+                                        bearColor: const Color(0xFFE53935),
+                                        bullColor: const Color(0xFF43A047),
+                                        enableSolidCandles: true,
+                                        xValueMapper: (data, _) => data.date,
+                                        lowValueMapper: (data, _) => data.low,
+                                        highValueMapper: (data, _) => data.high,
+                                        openValueMapper: (data, _) => data.open,
+                                        closeValueMapper: (data, _) => data.close,
+                                        onPointTap: (ChartPointDetails details) {
+                                          if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
+                                            setState(() {
+                                              selectedCandle = rawData[details.pointIndex!];
+                                            });
+                                            HapticFeedback.selectionClick();
+                                          }
+                                        },
+                                      ),
+                                    ]
+                                  : <CartesianSeries<CandleData, DateTime>>[
+                                      FastLineSeries<CandleData, DateTime>(
+                                        dataSource: rawData,
+                                        xValueMapper: (data, _) => data.date,
+                                        yValueMapper: (data, _) => data.close,
+                                        color: const Color(0xFF1B4332),
+                                        width: 2,
+                                        markerSettings: MarkerSettings(
+                                          isVisible: selectedPeriod == "1D" || selectedPeriod == "1W",
+                                          height: 5,
+                                          width: 5,
+                                          color: const Color(0xFF1B4332),
+                                          borderColor: Colors.white,
+                                         borderWidth: 1,
+                                        ),
+                                        onPointTap: (ChartPointDetails details) {
+                                          if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
+                                            setState(() {
+                                              selectedCandle = rawData[details.pointIndex!];
+                                            });
+                                            HapticFeedback.selectionClick();
+                                          }
+                                        },
+                                      ),
+                                    ],
+                            ),
+                            Positioned(
+                              left: 0,
+                              top: 0,
+                              bottom: 0,
+                              width: 50,
+                              child: GestureDetector(
+                                onVerticalDragStart: (details) {
+                                  _lastYDragPosition = details.localPosition.dy;
+                                },
+                                onVerticalDragUpdate: (details) {
+                                  if (_lastYDragPosition != null) {
+                                    double delta = details.localPosition.dy - _lastYDragPosition!;
+                                    _lastYDragPosition = details.localPosition.dy;
+                                    _handleYAxisDrag(delta, constraints.maxHeight, chartMin, chartMax);
+                                  }
+                                },
+                                onVerticalDragEnd: (_) {
+                                  _lastYDragPosition = null;
+                                },
+                                child: Container(color: Colors.transparent),
+                              ),
                             ),
                           ],
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
