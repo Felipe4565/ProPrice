@@ -3,8 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/user_data_provider.dart';
-import 'article_detail_page.dart'; // Assure-toi que cet import est correct
-import 'settings_page.dart';
+import 'article_detail_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
@@ -14,38 +13,23 @@ class ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. On écoute le provider
     final provider = context.watch<UserDataProvider>();
     
-    // On filtre les favoris
     final favoriteGrains = provider.grainsData
         .where((g) => provider.isFavorite(g["name"]))
         .toList();
 
-    // On récupère l'article et les alertes
     final lastArticle = provider.lastArticle;
     final alerts = provider.alerts;
 
     return Scaffold(
       backgroundColor: backgroundCream,
-      appBar: AppBar(
-        backgroundColor: backgroundCream,
-        elevation: 0,
-        title: Text("Mi Perfil", style: TextStyle(color: forestGreen, fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.settings_rounded, color: forestGreen),
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()));
-            },
-          )
-        ],
-      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SizedBox(height: 20),
             // --- HEADER & STATUT ---
             Center(
               child: Column(
@@ -58,7 +42,7 @@ class ProfilePage extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
                       color: forestGreen.withValues(alpha: 0.1), 
-                      borderRadius: BorderRadius.circular(20)
+                      borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text("Agricultor Pro", style: TextStyle(color: forestGreen, fontWeight: FontWeight.bold)),
                   ),
@@ -88,7 +72,7 @@ class ProfilePage extends StatelessWidget {
               ...favoriteGrains.map((item) => _buildListTile(
                 item["name"], 
                 "${item["price"]} USD", 
-                Icons.grass
+                Icons.grass,
               )),
 
             // --- DERNIER ARTICLE (DYNAMIQUE) ---
@@ -106,8 +90,8 @@ class ProfilePage extends StatelessWidget {
                     Navigator.push(
                       context, 
                       MaterialPageRoute(
-                        builder: (context) => ArticleDetailPage(article: lastArticle)
-                      )
+                        builder: (context) => ArticleDetailPage(article: lastArticle),
+                      ),
                     );
                   },
                 ),
@@ -148,7 +132,6 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  // --- WIDGETS ---
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(top: 25, bottom: 10),
@@ -158,8 +141,8 @@ class ProfilePage extends StatelessWidget {
           color: forestGreen.withValues(alpha: 0.5), 
           fontWeight: FontWeight.bold, 
           letterSpacing: 1.2, 
-          fontSize: 12
-        )
+          fontSize: 12,
+        ),
       ),
     );
   }

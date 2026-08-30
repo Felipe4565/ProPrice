@@ -14,7 +14,6 @@ import 'news_page.dart';
 import 'profile_page.dart';
 import 'settings_page.dart'; 
 
-
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
   @override
@@ -25,15 +24,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   String selectedGrain = "TRIGO";
 
-
   final BiometricService _biometricService = BiometricService();
-
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _authenticateOnStart();
@@ -41,20 +37,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _authenticateOnStart() async {
-  final prefs = await SharedPreferences.getInstance();
-  final bool isBioEnabled = prefs.getBool('bio_enabled') ?? false;
+    final prefs = await SharedPreferences.getInstance();
+    final bool isBioEnabled = prefs.getBool('bio_enabled') ?? false;
 
-  if (!isBioEnabled) return;
+    if (!isBioEnabled) return;
 
-  // évite double appel si déjà auth rapide
-  if (AuthLock.isAuthenticating) return;
-  if (AuthLock.lastSuccess != null &&
-      DateTime.now().difference(AuthLock.lastSuccess!).inSeconds < 4) {
-    return;
+    if (AuthLock.isAuthenticating) return;
+    if (AuthLock.lastSuccess != null &&
+        DateTime.now().difference(AuthLock.lastSuccess!).inSeconds < 4) {
+      return;
+    }
+
+    await _authenticate();
   }
-
-  await _authenticate();
-}
 
   @override
   void dispose() {
@@ -64,7 +59,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Si l'application revient au premier plan
     if (state == AppLifecycleState.resumed) {
       _checkBiometricOnResume();
     }
@@ -79,9 +73,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final now = DateTime.now();
 
     if (AuthLock.isAuthenticating) return;
-      if (AuthLock.lastSuccess != null &&
-          DateTime.now().difference(AuthLock.lastSuccess!).inSeconds < 4) {
-        return;
+    if (AuthLock.lastSuccess != null &&
+        DateTime.now().difference(AuthLock.lastSuccess!).inSeconds < 4) {
+      return;
     }
 
     _authenticate();
@@ -99,19 +93,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-
-
   void _toggleFavorite(Map<String, dynamic> item) {
     HapticFeedback.lightImpact();
     
-    // 1. On utilise le provider pour gérer la logique
     final provider = context.read<UserDataProvider>();
     provider.toggleFavorite(item['name']);
 
-    // 2. On vérifie le nouvel état pour afficher le bon message
     final isNowFav = provider.isFavorite(item['name']);
 
-    // 3. Feedback visuel (SnackBar)
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -136,7 +125,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() => _selectedIndex = index);
   }
 
-  // --- LOGIQUE POPUP ALERTE ---
   void _showAlertDialog(BuildContext mainContext, String grainName, double defaultPrice) {
     final TextEditingController priceController = TextEditingController(
       text: defaultPrice.toStringAsFixed(2),
@@ -302,39 +290,76 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    // 1. On récupère les paramètres via le Provider
     final appSettings = context.watch<AppSettings>();
-
-
-
     const Color darkGreen = Color(0xFF1B4D3E);
 
-    // 3. Définition du contenu du body selon l'index
     Widget bodyContent;
+    String appBarTitle = 'PROPRICE';
+
     if (_selectedIndex == 1) {
       bodyContent = const NewsPage();
+      appBarTitle = 'PROPRICE';
     } else if (_selectedIndex == 0) {
       bodyContent = _buildHomeContent(darkGreen, appSettings);
+      appBarTitle = 'PROPRICE';
     } else if (_selectedIndex == 2) {
       bodyContent = const SettingsPage();
+      appBarTitle = 'PROPRICE';
     } else {
       bodyContent = const ProfilePage();
+      appBarTitle = 'Mi Perfil'; // Seul le profil conserve son titre spécifique
     }
 
-    // 4. Retour du Scaffold
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFFF2EFE9),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        title: const Text('PROPRICE',
-            style: TextStyle(
-                color: darkGreen, fontWeight: FontWeight.w900, fontSize: 24)),
+        title: Text(
+          appBarTitle,
+          style: const TextStyle(
+            color: darkGreen,
+            fontWeight: FontWeight.w900,
+            fontSize: 24,
+          ),
+        ),
         actions: [
-          IconButton(
-              icon: const Icon(Icons.menu_open_rounded,
-                  color: darkGreen, size: 32),
-              onPressed: () {})
+          if (_selectedIndex == 3)
+            IconButton(
+              icon: const Icon(Icons.settings_rounded, color: darkGreen),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SettingsPage()),
+                );
+              },
+            ),
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Center(
+              child: SizedBox(
+                width: 32,
+                height: 32,
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: darkGreen.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.image_outlined,
+                        color: darkGreen,
+                        size: 18,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
         ],
       ),
       body: bodyContent,
@@ -381,7 +406,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return (a["order"] as int).compareTo(b["order"] as int);
     });
 
-
     final currentData = grainsData.firstWhere((g) => g["name"] == selectedGrain);
     final bool isPositive = (currentData["variation"] as String).contains('+');
     final Color trendColor = isPositive ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
@@ -407,7 +431,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     appSettings.hideBalance ? "****" : "${currentData["price"]}",
                     style: TextStyle(
                       color: darkGreen, 
-                      fontSize: appSettings.hideBalance ? 40 : 56, // Optionnel : on réduit la taille pour que les étoiles rendent bien
+                      fontSize: appSettings.hideBalance ? 40 : 56,
                       fontWeight: FontWeight.w900, 
                       letterSpacing: appSettings.hideBalance ? 0 : -2
                     )
@@ -416,43 +440,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   const Spacer(),
                   Container(
                     decoration: BoxDecoration(boxShadow: [BoxShadow(color: darkGreen.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 8))]),
-                  child:ElevatedButton(
-                    onPressed: () {
-                      HapticFeedback.lightImpact();
+                    child: ElevatedButton(
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        final provider = context.read<UserDataProvider>();
+                        final favoriteNotifier = ValueNotifier<bool>(provider.isFavorite(selectedGrain));
+                        favoriteNotifier.addListener(() {
+                          if (favoriteNotifier.value != provider.isFavorite(selectedGrain)) {
+                            provider.toggleFavorite(selectedGrain);
+                          }
+                        });
 
-                      // 1. On accède au provider pour lire l'état actuel
-                      final provider = context.read<UserDataProvider>();
-                      
-                      // 2. On crée le notifier avec l'état initial du grain sélectionné
-                      final favoriteNotifier = ValueNotifier<bool>(provider.isFavorite(selectedGrain));
-                      
-                      // 3. On crée un lien : si on change le favori dans ChartPage, le provider est mis à jour
-                      favoriteNotifier.addListener(() {
-                        if (favoriteNotifier.value != provider.isFavorite(selectedGrain)) {
-                          provider.toggleFavorite(selectedGrain);
-                        }
-                      });
-
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          // On passe maintenant les deux paramètres requis
-                          builder: (context) => ChartPage(
-                            commodityName: selectedGrain,
-                            favoriteNotifier: favoriteNotifier,
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChartPage(
+                              commodityName: selectedGrain,
+                              favoriteNotifier: favoriteNotifier,
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: darkGreen,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: darkGreen,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                      ),
+                      child: const Text("VER GRAFICO", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
-                    child: const Text("VER GRAFICO", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
                   ),
                 ],
               ),
@@ -493,14 +510,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(30),
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
                 itemCount: sortedList.length,
                 itemBuilder: (context, index) {
                   final item = sortedList[index];
                   final isSelected = selectedGrain == item["name"];
-                  final isFav = context.watch<UserDataProvider>().isFavorite(item["name"]);               return AnimatedContainer(
+                  final isFav = context.watch<UserDataProvider>().isFavorite(item["name"]);
+                  
+                  return AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                     child: Material(
                       color: isSelected ? darkGreen : Colors.white,
                       borderRadius: BorderRadius.circular(20),
@@ -508,7 +527,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         borderRadius: BorderRadius.circular(20),
                         onTap: () => _onSelectGrain(item["name"]),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(color: isSelected ? darkGreen : Colors.grey.withOpacity(0.15), width: isSelected ? 2 : 1.5),
@@ -526,7 +545,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                   HapticFeedback.lightImpact();
                                   double defaultPrice = double.tryParse(item["price"].toString()) ?? 0.0;
                                   
-                                  // 1. Navigation vers la page graphique (ChartPage)
                                   final provider = context.read<UserDataProvider>();
                                   final favoriteNotifier = ValueNotifier<bool>(provider.isFavorite(item["name"]));
                                   favoriteNotifier.addListener(() {
@@ -544,7 +562,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     ),
                                   );
 
-                                  // 2. Affichage direct du popup d'alerte par-dessus la page graphique
                                   Future.delayed(const Duration(milliseconds: 300), () {
                                     if (mounted) {
                                       _showAlertDialog(context, item["name"], defaultPrice);
@@ -614,7 +631,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 }
 
-// --- LES CLASSES DE GRAPHIQUES RESTENT IDENTIQUES ---
 class RealMiniChart extends StatelessWidget {
   final String variation;
   final Color color;

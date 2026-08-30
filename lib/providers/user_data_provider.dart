@@ -11,8 +11,6 @@ class UserDataProvider extends ChangeNotifier {
     {"name": "MAIZ", "emoji": "🌽", "price": "185.00", "variation": "+0.50%", "order": 2},
     {"name": "CANOLA", "emoji": "🌿", "price": "610.00", "variation": "+2.15%", "order": 3},
     {"name": "GIRASOL", "emoji": "🌻", "price": "390.00", "variation": "-0.75%", "order": 4},
-    {"name": "CEBADA", "emoji": "🪴", "price": "210.00", "variation": "+1.10%", "order": 5},
-    {"name": "ARROZ", "emoji": "🍚", "price": "12.40", "variation": "+0.25%", "order": 6},
   ];
 
   List<String> _favorites = [];
