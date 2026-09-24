@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_colors.dart';
+
 class TermsAndConditionsPage extends StatelessWidget {
   const TermsAndConditionsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2EFE9),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1B4332),
+        // Avant : backgroundColor: Color(0xFF1B4332) (bandeau vert plein).
         elevation: 0,
         title: const Text(
           "Términos y Condiciones",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(color: AppColors.forest700, fontWeight: FontWeight.bold),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.forest700, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -27,25 +29,25 @@ class TermsAndConditionsPage extends StatelessWidget {
             _buildSectionTitle("1. Introducción"),
             _buildParagraph(
                 "Bienvenido a ProPrice. Al acceder y utilizar nuestra aplicación, aceptas estar sujeto a los siguientes términos y condiciones. Si no estás de acuerdo con alguno de estos términos, te rogamos que no utilices la aplicación."),
-            
+
             _buildSectionTitle("2. Uso de la Aplicación"),
             _buildParagraph(
                 "Te comprometes a utilizar ProPrice únicamente para fines legales y de manera que no infrinja los derechos de terceros ni restrinja o impida el uso y disfrute de la aplicación por parte de otros usuarios."),
-            
+
             _buildSectionTitle("3. Propiedad Intelectual"),
             _buildParagraph(
                 "Todo el contenido, marcas registradas, logotipos y software presentes en esta aplicación son propiedad exclusiva de ProPrice y están protegidos por las leyes de propiedad intelectual."),
-            
+
             _buildSectionTitle("4. Limitación de Responsabilidad"),
             _buildParagraph(
                 "ProPrice se proporciona 'tal cual', sin garantías de ningún tipo. No seremos responsables por daños directos, indirectos, incidentales o consecuentes derivados del uso de nuestra aplicación."),
-            
+
             _buildSectionTitle("5. Modificaciones"),
             _buildParagraph(
                 "Nos reservamos el derecho de modificar estos términos en cualquier momento. Los cambios entrarán en vigor inmediatamente después de su publicación en la aplicación."),
-            
+
             const SizedBox(height: 30),
-            const Divider(color: Color(0xFF1B4332)),
+            const Divider(color: AppColors.forest500),
             const SizedBox(height: 10),
             Center(
               child: Text(
@@ -65,7 +67,7 @@ class TermsAndConditionsPage extends StatelessWidget {
       child: Text(
         title,
         style: const TextStyle(
-          color: Color(0xFF1B4332),
+          color: AppColors.forest500,
           fontWeight: FontWeight.bold,
           fontSize: 18,
         ),

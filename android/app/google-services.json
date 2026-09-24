@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "627068802082",
+    "project_id": "proprice-app",
+    "storage_bucket": "proprice-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:627068802082:android:395525a8b2d7d6d03f267b",
+        "android_client_info": {
+          "package_name": "com.example.proprice"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDgijhLbPEoPOXWc98at7M4iDaV6hKXQQA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -48,5 +48,17 @@
 
 	<key>NSFaceIDUsageDescription</key>
     <string>Necesitamos acceso a la biometría para proteger tu cuenta.</string>
+
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>proprice.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>proprice</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

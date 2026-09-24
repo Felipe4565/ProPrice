@@ -8,9 +8,13 @@ import 'package:intl/intl.dart';
 import 'package:proprice/providers/user_data_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:shimmer/shimmer.dart';
 
 import 'article_detail_page.dart';
+import 'subscription_plan_page.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_page_route.dart';
+import '../widgets/app_skeleton.dart';
+import '../widgets/staggered_fade_in.dart';
 
 class NewsPage extends StatefulWidget {
   const NewsPage({super.key});
@@ -28,11 +32,38 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
   bool _isSearching = false;
 
   // --- NOUVELLES VARIABLES LOCALISATION ---
-  String _userCountry = "Uruguay OR Argentina"; 
+  String _userCountry = "Uruguay OR Argentina";
   String _locationDisplay = "MERCADO REGIONAL";
 
-  final List<String> _categories = ["SOJA", "MAIZ", "TRIGO", "CLIMA", "ECONOMÍA", "TECH"];
-  
+  // Catégories réorganisées : une par matière suivie dans l'appli (même
+  // ordre que grainsData dans UserDataProvider), puis les catégories
+  // transversales CLIMA / ECONOMÍA / TECH.
+  final List<String> _categories = [
+    "TRIGO",
+    "SOJA",
+    "MAIZ",
+    "CANOLA",
+    "GIRASOL",
+    "CLIMA",
+    "ECONOMÍA",
+    "TECH",
+  ];
+
+  // Mots-clés utilisés en filtrage post-requête (pas dans la query elle-même)
+  // pour vérifier que l'article est réellement pertinent pour la catégorie.
+  // La query envoyée à l'API reste volontairement large (meilleur rappel),
+  // et c'est ce filtre qui assure la précision.
+  final Map<String, List<String>> _categoryKeywords = {
+    "TRIGO": ["trigo"],
+    "SOJA": ["soja", "poroto de soja"],
+    "MAIZ": ["maiz", "maíz", "corn"],
+    "CANOLA": ["canola", "colza"],
+    "GIRASOL": ["girasol"],
+    "CLIMA": ["sequia", "sequía", "lluvia", "lluvias", "pronostico", "pronóstico", "clima", "helada", "heladas"],
+    "ECONOMÍA": ["dolar", "dólar", "retenciones", "exportacion", "exportación", "economia", "economía", "inflacion", "inflación"],
+    "TECH": ["agrotech", "tecnologia", "tecnología", "drone", "drones", "riego", "maquinaria", "satelital"],
+  };
+
   final String _apiKey = "ebfe0c0a67ca4acab293895eca1c5410";
   final String _domains = "elpais.com.uy,elobservador.com.uy,agrofy.com.ar,lanacion.com.ar,infocampo.com.ar,bcr.com.ar,ambito.com,clarin.com";
 
@@ -40,7 +71,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _tabController = TabController(length: _categories.length, vsync: this);
-    
+
     // Initialisation avec détection de pays
     _initLocationAndNews();
 
@@ -107,17 +138,17 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
             const Text("Seleccionar Región", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 10),
             ListTile(
-              leading: const Icon(Icons.place, color: Color(0xFF1B4332)),
+              leading: const Icon(Icons.place, color: AppColors.forest500),
               title: const Text("Uruguay"),
               onTap: () { _updateLocationState("Uruguay"); Navigator.pop(context); _fetchNews(); },
             ),
             ListTile(
-              leading: const Icon(Icons.place, color: Color(0xFF1B4332)),
+              leading: const Icon(Icons.place, color: AppColors.forest500),
               title: const Text("Argentina"),
               onTap: () { _updateLocationState("Argentina"); Navigator.pop(context); _fetchNews(); },
             ),
             ListTile(
-              leading: const Icon(Icons.public, color: Color(0xFF1B4332)),
+              leading: const Icon(Icons.public, color: AppColors.forest500),
               title: const Text("Regional (Ambos)"),
               onTap: () { _updateLocationState("Global"); Navigator.pop(context); _fetchNews(); },
             ),
@@ -133,37 +164,52 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
 
     String query = "";
     String filter = _categories[_tabController.index];
+    // Mots-clés de pertinence appliqués APRÈS la requête (vide en mode
+    // recherche libre : on ne restreint pas ce que l'utilisateur cherche).
+    List<String> relevanceKeywords = [];
 
     if (_isSearching && _searchController.text.isNotEmpty) {
       query = "${_searchController.text} AND (agro OR mercado)";
     } else {
+      relevanceKeywords = _categoryKeywords[filter] ?? [];
+      // Requêtes volontairement plus larges qu'avant (on retire les AND
+      // (mercado OR precios OR ...) qui excluaient beaucoup d'articles
+      // pertinents) : le filtrage de pertinence ci-dessous se charge de la
+      // précision, ce qui permet d'augmenter le volume d'articles obtenus
+      // sans perdre en qualité.
       switch (filter) {
-        case "SOJA": 
-          query = "soja AND (mercado OR precios OR cosecha)"; break;
-        case "MAIZ": 
-          query = "(maiz OR corn) AND (mercado OR precios OR exportacion)"; break;
-        case "TRIGO": 
-          query = "trigo AND (mercado OR precios OR bolsa)"; break;
-        case "CLIMA": 
-          query = "(sequia OR lluvias OR pronostico OR clima) AND $_userCountry"; break;
-        case "ECONOMÍA": 
-          query = "(dolar OR retenciones OR exportacion OR economia) AND agro"; break;
-        case "TECH": 
-          query = "(agrotech OR machinery OR drones OR riego)"; break;
+        case "TRIGO":
+          query = "trigo AND (agro OR mercado OR precios OR cosecha OR exportacion)"; break;
+        case "SOJA":
+          query = "soja AND (agro OR mercado OR precios OR cosecha OR exportacion)"; break;
+        case "MAIZ":
+          query = "(maiz OR maíz OR corn) AND (agro OR mercado OR precios OR cosecha OR exportacion)"; break;
+        case "CANOLA":
+          query = "(canola OR colza) AND (agro OR mercado OR precios OR exportacion)"; break;
+        case "GIRASOL":
+          query = "girasol AND (agro OR mercado OR precios OR aceite OR cosecha)"; break;
+        case "CLIMA":
+          query = "(sequia OR sequía OR lluvias OR pronostico OR pronóstico OR clima OR helada OR heladas) AND $_userCountry"; break;
+        case "ECONOMÍA":
+          query = "(dolar OR dólar OR retenciones OR exportacion OR exportación OR economia OR economía OR inflacion OR inflación) AND agro"; break;
+        case "TECH":
+          query = "(agrotech OR drones OR riego OR maquinaria OR tecnologia OR tecnología) AND agro"; break;
         default:
           query = "agro mercado granos";
       }
     }
 
-    final url = 'https://newsapi.org/v2/everything?q=$query&domains=$_domains&language=es&sortBy=publishedAt&pageSize=20&apiKey=$_apiKey';
+    // pageSize=100 : c'est le maximum autorisé par NewsAPI (plan Developer),
+    // contre 20 auparavant, pour maximiser le nombre d'articles disponibles
+    // en une seule requête.
+    final url = 'https://newsapi.org/v2/everything?q=$query&domains=$_domains&language=es&sortBy=publishedAt&pageSize=100&apiKey=$_apiKey';
 
     try {
       final response = await http.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final results = (data['articles'] as List).where((a) => 
-          a['urlToImage'] != null && a['title'] != null && !a['title'].toString().contains("REMOVED")
-        ).toList();
+        final rawArticles = (data['articles'] as List?) ?? [];
+        final results = _filterAndDeduplicate(rawArticles, relevanceKeywords);
 
         if (mounted) {
           setState(() {
@@ -172,16 +218,116 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
             _isLoading = false;
           });
         }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  /// Filtre et déduplique les articles bruts renvoyés par l'API :
+  /// - écarte les articles retirés par NewsAPI ("[Removed]") ou incomplets
+  ///   (sans titre, image ou description exploitable)
+  /// - écarte les descriptions trop courtes (souvent du bruit / clickbait)
+  /// - déduplique les dépêches reprises telles quelles par plusieurs médias
+  ///   (comparaison sur un titre normalisé)
+  /// - si des [keywords] sont fournies (catégorie thématique), ne garde que
+  ///   les articles dont le titre ou la description en contient au moins un,
+  ///   ce qui compense l'élargissement de la requête envoyée à l'API.
+  List<dynamic> _filterAndDeduplicate(List<dynamic> articles, List<String> keywords) {
+    final seenTitles = <String>{};
+    final filtered = <dynamic>[];
+
+    for (final a in articles) {
+      final title = a['title']?.toString();
+      final description = a['description']?.toString();
+      final image = a['urlToImage']?.toString();
+      final source = (a['source']?['name']?.toString() ?? '').toLowerCase();
+
+      if (title == null || title.trim().isEmpty) continue;
+      if (title.toLowerCase().contains('[removed]')) continue;
+      if (source == 'removed.com' || source.isEmpty) continue;
+      if (image == null || !image.startsWith('http')) continue;
+      if (description == null || description.trim().length < 40) continue;
+
+      final normalizedTitle = title
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9áéíóúñ ]'), '')
+          .trim();
+      if (seenTitles.contains(normalizedTitle)) continue;
+
+      if (keywords.isNotEmpty) {
+        final haystack = '$title $description'.toLowerCase();
+        final isRelevant = keywords.any((k) => haystack.contains(k.toLowerCase()));
+        if (!isRelevant) continue;
+      }
+
+      seenTitles.add(normalizedTitle);
+      filtered.add(a);
+    }
+
+    return filtered;
+  }
+
+  /// Affiche le message "limite atteinte" avec un accès direct au plan Pro.
+  void _showDailyLimitReached() {
+    const limitSnackbarDuration = Duration(seconds: 4);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    final controller = messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          "Alcanzaste el límite de ${UserDataProvider.freeNewsArticlesLimit} artículos gratis por hoy.",
+        ),
+        duration: limitSnackbarDuration,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: Colors.orange.shade800,
+        action: SnackBarAction(
+          label: "VER PLANES",
+          textColor: Colors.white,
+          onPressed: () {
+            Navigator.push(
+              context,
+              AppPageRoute(builder: (context) => const SubscriptionPlanPage()),
+            );
+          },
+        ),
+      ),
+    );
+    Future.delayed(limitSnackbarDuration, () {
+      if (mounted) controller.close();
+    });
+  }
+
+  /// Ouvre l'article si la limite quotidienne du plan gratuit le permet.
+  Future<void> _openArticle(dynamic art) async {
+    final provider = context.read<UserDataProvider>();
+    final articleId = (art['url'] ?? art['title'] ?? '').toString();
+
+    final allowed = await provider.registerArticleRead(articleId);
+    if (!allowed) {
+      HapticFeedback.lightImpact();
+      _showDailyLimitReached();
+      return;
+    }
+
+    provider.setLastArticle(art);
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      AppPageRoute(builder: (context) => ArticleDetailPage(article: art)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    const Color forestGreen = Color(0xFF1B4332);
+    const Color forestGreen = AppColors.forest500;
     const Color lightLeaf = Color(0xFF74C69D);
+
+    final provider = context.watch<UserDataProvider>();
+    final currentCategory = _categories[_tabController.index];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAF9),
@@ -216,7 +362,21 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white60,
           labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-          tabs: _categories.map((c) => Tab(text: c)).toList(),
+          tabs: _categories.map((c) {
+            final isLocked = !provider.canAccessCategory(c);
+            return Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(c),
+                  if (isLocked) ...[
+                    const SizedBox(width: 4),
+                    const Icon(Icons.lock_outline_rounded, size: 12),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
         ),
       ),
       body: RefreshIndicator(
@@ -225,40 +385,143 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
           await _fetchNews();
         },
         color: forestGreen,
-        child: _isLoading 
-          ? _buildShimmer()
-          : _articles.isEmpty 
-              ? _buildEmptyState(forestGreen)
-              : CustomScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 25, 20, 10),
-                        child: Text(
-                          _tabController.index == 3 ? "CLIMA: $_userCountry".toUpperCase() : "NOTICIAS ACTUALIZADAS",
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2),
-                        ),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final art = _articles[index];
-                            String title = art['title'].toString().toLowerCase();
-                            bool isUp = title.contains("sube") || title.contains("alza") || title.contains("suba");
-                            bool isDown = title.contains("baja") || title.contains("cae") || title.contains("caída");
-                            return _buildPremiumCard(art, forestGreen, isUp, isDown);
-                          },
-                          childCount: _articles.length,
-                        ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 30)),
-                  ],
+        child: _isLoading
+            ? _buildShimmer()
+            : !provider.canAccessCategory(currentCategory)
+            ? _buildCategoryLockedState(forestGreen, currentCategory)
+            : _articles.isEmpty
+            ? _buildEmptyState(forestGreen)
+            : CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 25, 20, 10),
+                child: Text(
+                  currentCategory == "CLIMA"
+                      ? "CLIMA: $_userCountry".toUpperCase()
+                      : "NOTICIAS ACTUALIZADAS",
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2),
                 ),
+              ),
+            ),
+            if (!provider.isPremium)
+              SliverToBoxAdapter(
+                child: _buildDailyLimitBanner(forestGreen, provider),
+              ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                    final art = _articles[index];
+                    String title = art['title'].toString().toLowerCase();
+                    bool isUp = title.contains("sube") || title.contains("alza") || title.contains("suba");
+                    bool isDown = title.contains("baja") || title.contains("cae") || title.contains("caída");
+                    return StaggeredFadeIn(
+                      index: index,
+                      child: _buildPremiumCard(art, forestGreen, isUp, isDown),
+                    );
+                  },
+                  childCount: _articles.length,
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 30)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDailyLimitBanner(Color primary, UserDataProvider provider) {
+    final remaining = provider.articlesRemainingToday;
+    final reached = remaining <= 0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: reached ? Colors.orange.withOpacity(0.12) : primary.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.menu_book_rounded,
+              size: 16,
+              color: reached ? Colors.orange.shade800 : primary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                reached
+                    ? "Límite diario de artículos alcanzado"
+                    : "$remaining/${UserDataProvider.freeNewsArticlesLimit} artículos gratis restantes hoy",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: reached ? Colors.orange.shade800 : primary,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  AppPageRoute(builder: (context) => const SubscriptionPlanPage()),
+                );
+              },
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text("PRO", style: TextStyle(fontWeight: FontWeight.bold, color: primary)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryLockedState(Color primary, String category) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_outline_rounded, size: 70, color: primary.withOpacity(0.3)),
+            const SizedBox(height: 20),
+            Text(
+              "Categoría $category disponible en Pro",
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              "Actualiza a Agricultor Pro para acceder a todas las categorías de noticias.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  AppPageRoute(builder: (context) => const SubscriptionPlanPage()),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text("VER PLANES", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -314,17 +577,7 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
     } catch (e) {}
 
     return GestureDetector(
-      onTap: () {
-        // 1. Sauvegarder l'objet complet (art) dans le Provider
-        // On passe maintenant la Map entière, pas juste le titre
-        context.read<UserDataProvider>().setLastArticle(art);
-        
-        // 2. Naviguer vers les détails
-        Navigator.push(
-          context, 
-          MaterialPageRoute(builder: (context) => ArticleDetailPage(article: art))
-        );
-      },
+      onTap: () => _openArticle(art),
       child: Container(
         margin: const EdgeInsets.only(bottom: 24),
         decoration: BoxDecoration(
@@ -395,19 +648,50 @@ class _NewsPageState extends State<NewsPage> with TickerProviderStateMixin {
     );
   }
 
+  /// Squelette d'une carte d'article : image 16/9 + bloc titre, dans le même
+  /// conteneur (radius 24, ombre légère) que _buildPremiumCard, pour que le
+  /// passage skeleton → contenu réel ne "saute" pas visuellement.
+  Widget _buildNewsCardSkeleton() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 8))],
+      ),
+      child: Column(
+        children: [
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: AppSkeleton(
+              height: double.infinity,
+              width: double.infinity,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                AppSkeleton(height: 11, width: 80),
+                SizedBox(height: 14),
+                AppSkeleton(height: 16, width: double.infinity),
+                SizedBox(height: 8),
+                AppSkeleton(height: 16, width: 180),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildShimmer() {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: 3, 
-      itemBuilder: (c,i) => Shimmer.fromColors(
-        baseColor: Colors.grey[200]!,
-        highlightColor: Colors.white,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 24),
-          height: 280,
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
-        ),
-      ),
+      itemCount: 3,
+      itemBuilder: (c, i) => _buildNewsCardSkeleton(),
     );
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../theme/app_colors.dart';
+
 class LanguagePage extends StatefulWidget {
   const LanguagePage({super.key});
 
@@ -44,12 +46,12 @@ class _LanguagePageState extends State<LanguagePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2EFE9),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1B4332),
-        title: const Text("Idioma", style: TextStyle(color: Colors.white)),
+        // Avant : backgroundColor: Color(0xFF1B4332) (bandeau vert plein).
+        title: const Text("Idioma", style: TextStyle(color: AppColors.forest700)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.forest700, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -59,11 +61,11 @@ class _LanguagePageState extends State<LanguagePage> {
           children: [
             const SizedBox(height: 40),
             // --- AJOUT : Illustration/Icône ---
-            const Icon(Icons.language, size: 80, color: Color(0xFF1B4332)),
+            const Icon(Icons.language, size: 80, color: AppColors.forest500),
             const SizedBox(height: 20),
             const Text(
               "Selecciona tu idioma",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1B4332)),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.forest500),
             ),
             const SizedBox(height: 10),
             Text(
@@ -72,7 +74,7 @@ class _LanguagePageState extends State<LanguagePage> {
               style: TextStyle(color: Colors.grey[600]),
             ),
             const SizedBox(height: 40),
-            
+
             // --- Ta liste ---
             Expanded(
               child: ListView.builder(
@@ -81,12 +83,13 @@ class _LanguagePageState extends State<LanguagePage> {
                   final lang = _languages[index];
                   return Card(
                     elevation: 0,
+                    color: AppColors.surface,
                     margin: const EdgeInsets.only(bottom: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     child: RadioListTile<String>(
                       value: lang['code']!,
                       groupValue: _selectedLanguage,
-                      activeColor: const Color(0xFF1B4332),
+                      activeColor: AppColors.forest500,
                       title: Text(lang['name']!, style: const TextStyle(fontWeight: FontWeight.w600)),
                       onChanged: (value) => _changeLanguage(value!),
                     ),

@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:ui';
+import '../theme/app_colors.dart';
 
 class ArticleDetailPage extends StatelessWidget {
   final dynamic article;
@@ -26,7 +27,7 @@ class ArticleDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Couleurs thématiques
-    const Color forestGreen = Color(0xFF1B4332);
+    const Color forestGreen = AppColors.forest500;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Formatage sécurisé de la date
@@ -125,18 +126,18 @@ class ArticleDetailPage extends StatelessWidget {
                         child: Text(
                           (article['source']?['name'] ?? "NEWS").toUpperCase(),
                           style: const TextStyle(
-                            color: forestGreen, 
-                            fontWeight: FontWeight.bold, 
-                            fontSize: 11
+                              color: forestGreen,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11
                           ),
                         ),
                       ),
                       Text(
                         _calculateReadingTime(article['description']),
                         style: TextStyle(
-                          color: isDark ? Colors.grey[400] : Colors.grey[600], 
-                          fontSize: 12, 
-                          fontStyle: FontStyle.italic
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic
                         ),
                       ),
                     ],
@@ -160,11 +161,11 @@ class ArticleDetailPage extends StatelessWidget {
                   Text(
                     formattedDate,
                     style: TextStyle(
-                      color: isDark ? Colors.grey[500] : Colors.grey[600], 
-                      fontSize: 13
+                        color: isDark ? Colors.grey[500] : Colors.grey[600],
+                        fontSize: 13
                     ),
                   ),
-                  
+
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 25),
                     child: Divider(thickness: 0.7),
@@ -197,8 +198,8 @@ class ArticleDetailPage extends StatelessWidget {
 
   // Widget des boutons de l'AppBar (Glassmorphism)
   Widget _buildFloatingButton({
-    required BuildContext context, 
-    required IconData icon, 
+    required BuildContext context,
+    required IconData icon,
     required VoidCallback onTap
   }) {
     return Padding(
@@ -228,9 +229,9 @@ class ArticleDetailPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.35), 
-            blurRadius: 20, 
-            offset: const Offset(0, 10)
+              color: color.withOpacity(0.35),
+              blurRadius: 20,
+              offset: const Offset(0, 10)
           ),
         ],
       ),
@@ -252,8 +253,8 @@ class ArticleDetailPage extends StatelessWidget {
               child: Text(
                 "CONTINUAR LEYENDO",
                 style: TextStyle(
-                  color: Colors.white, 
-                  fontWeight: FontWeight.bold, 
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
                   letterSpacing: 1.5,
                   fontSize: 15,
                 ),

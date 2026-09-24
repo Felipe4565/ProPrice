@@ -12,7 +12,14 @@ import '../services/biometric_service.dart';
 import 'chart_page.dart';
 import 'news_page.dart';
 import 'profile_page.dart';
-import 'settings_page.dart'; 
+import 'settings_page.dart';
+import 'subscription_plan_page.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_page_route.dart';
+import '../widgets/app_skeleton.dart';
+import '../theme/app_theme.dart';
+import '../widgets/staggered_fade_in.dart';
+import '../widgets/app_bottom_nav_bar.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -25,6 +32,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String selectedGrain = "TRIGO";
 
   final BiometricService _biometricService = BiometricService();
+  // Contrôle le PageView du body : permet à la fois le swipe manuel et la
+  // navigation programmatique quand on tape sur la barre du bas.
+  late final PageController _pageController = PageController(initialPage: _selectedIndex);
 
   @override
   void initState() {
@@ -33,6 +43,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _authenticateOnStart();
+      _checkWelcomePaywall(); // Vérifie et affiche le pop-up au lancement pour les comptes gratuits
     });
   }
 
@@ -51,9 +62,90 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     await _authenticate();
   }
 
+  /// Affiche le pop-up de promotion du plan Pro au lancement (pour les utilisateurs gratuits)
+  Future<void> _checkWelcomePaywall() async {
+    // Petit délai pour laisser le temps au UserDataProvider de charger les données de Supabase
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
+
+    final provider = context.read<UserDataProvider>();
+
+    // Si l'utilisateur est en plan gratuit
+    if (!provider.isPremium) {
+      final prefs = await SharedPreferences.getInstance();
+      // Optionnel : Si vous voulez l'afficher à *chaque* lancement, ou une seule fois par session/jour.
+      // Ici, on utilise un flag de session pour qu'il apparaisse à chaque ouverture de l'app si gratuit.
+      bool hasShownThisSession = prefs.getBool('welcome_popup_shown_session') ?? false;
+
+      if (!hasShownThisSession) {
+        _showUpgradeDialog(context);
+        await prefs.setBool('welcome_popup_shown_session', true);
+      }
+    }
+  }
+
+  void _showUpgradeDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          backgroundColor: AppColors.background,
+          title: Row(
+            children: const [
+              Text('🌾 ', style: TextStyle(fontSize: 24)),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Plan Gratuito',
+                  style: TextStyle(
+                    color: AppColors.forest500,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Desbloquea análisis avanzados, gráficos interactivos completos y límites ilimitados pasando al plan Agricultor Pro.',
+            style: TextStyle(
+              color: AppColors.forest500.withValues(alpha: 0.8),
+              fontSize: 14,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(
+                'Más tarde',
+                style: TextStyle(color: AppColors.forest500.withValues(alpha: 0.6)),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.forest500,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                Navigator.push(
+                  context,
+                  AppPageRoute(builder: (context) => const SubscriptionPlanPage()),
+                );
+              },
+              child: const Text('Ver Planes', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -69,8 +161,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final bool isBioEnabled = prefs.getBool('bio_enabled') ?? false;
 
     if (!isBioEnabled) return;
-
-    final now = DateTime.now();
 
     if (AuthLock.isAuthenticating) return;
     if (AuthLock.lastSuccess != null &&
@@ -93,11 +183,41 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  /// Affiche un message incitant à passer au plan Premium, avec un bouton
+  /// direct vers la page de sélection de plan.
+  void _showUpgradeSnackbar(String featureLabel) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Límite del plan gratuito alcanzado ($featureLabel)."),
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: Colors.orange.shade800,
+        action: SnackBarAction(
+          label: "VER PLANES",
+          textColor: Colors.white,
+          onPressed: () {
+            Navigator.push(
+              context,
+              AppPageRoute(builder: (context) => const SubscriptionPlanPage()),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   void _toggleFavorite(Map<String, dynamic> item) {
     HapticFeedback.lightImpact();
-    
+
     final provider = context.read<UserDataProvider>();
-    provider.toggleFavorite(item['name']);
+    final wasApplied = provider.toggleFavorite(item['name']);
+
+    if (!wasApplied) {
+      _showUpgradeSnackbar("máximo ${UserDataProvider.freeFavoritesLimit} favoritos");
+      return;
+    }
 
     final isNowFav = provider.isFavorite(item['name']);
 
@@ -108,7 +228,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         duration: const Duration(seconds: 1),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        backgroundColor: const Color(0xFF1B4D3E),
+        backgroundColor: AppColors.forest600,
       ),
     );
   }
@@ -121,15 +241,31 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _onItemTapped(int index) {
+    if (index == _selectedIndex) return;
     HapticFeedback.selectionClick();
-    setState(() => _selectedIndex = index);
+    // setState n'est pas appelé ici directement : onPageChanged du PageView
+    // s'en charge une fois l'animation de glissement terminée, pour que
+    // _selectedIndex reste synchronisé qu'on arrive ici par un tap ou par
+    // un swipe manuel sur le contenu.
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   void _showAlertDialog(BuildContext mainContext, String grainName, double defaultPrice) {
+    final provider = context.read<UserDataProvider>();
+
+    // Vérifie la limite du plan gratuit AVANT même d'ouvrir le formulaire.
+    if (!provider.canAddMoreAlerts) {
+      _showUpgradeSnackbar("máximo ${UserDataProvider.freeAlertsLimit} alertas");
+      return;
+    }
+
     final TextEditingController priceController = TextEditingController(
       text: defaultPrice.toStringAsFixed(2),
     );
-    final provider = context.read<UserDataProvider>();
     final commodityAlerts = provider.alerts
         .where((a) => a['commodity'].toString().toUpperCase() == grainName.toUpperCase())
         .toList();
@@ -139,7 +275,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor: const Color(0xFFF2EFE9),
+          backgroundColor: AppColors.background,
           title: Row(
             children: const [
               Text('🔔', style: TextStyle(fontSize: 24)),
@@ -147,7 +283,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Text(
                 'Définir une alerte',
                 style: TextStyle(
-                  color: Color(0xFF1B4332),
+                  color: AppColors.forest500,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
@@ -161,7 +297,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Text(
                 'Entrez le seuil de prix pour $grainName :',
                 style: TextStyle(
-                  color: const Color(0xFF1B4332).withValues(alpha: 0.8),
+                  color: AppColors.forest500.withValues(alpha: 0.8),
                   fontSize: 14,
                 ),
               ),
@@ -174,21 +310,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ],
                 decoration: InputDecoration(
                   labelText: 'Seuil cible (\$)',
-                  labelStyle: const TextStyle(color: Color(0xFF1B4332)),
+                  labelStyle: const TextStyle(color: AppColors.forest500),
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide(color: const Color(0xFF1B4332).withValues(alpha: 0.2)),
+                    borderSide: BorderSide(color: AppColors.forest500.withValues(alpha: 0.2)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
-                    borderSide: const BorderSide(color: Color(0xFF1B4332), width: 2),
+                    borderSide: const BorderSide(color: AppColors.forest500, width: 2),
                   ),
                 ),
                 style: const TextStyle(
                   fontWeight: FontWeight.w900,
-                  color: Color(0xFF1B4332),
+                  color: AppColors.forest500,
                   fontSize: 16,
                 ),
               ),
@@ -199,12 +335,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               onPressed: () => Navigator.pop(dialogContext),
               child: Text(
                 'Annuler',
-                style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.6)),
+                style: TextStyle(color: AppColors.forest500.withValues(alpha: 0.6)),
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B4332),
+                backgroundColor: AppColors.forest500,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () {
@@ -220,11 +356,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       builder: (confirmContext) {
                         return AlertDialog(
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          backgroundColor: const Color(0xFFF2EFE9),
+                          backgroundColor: AppColors.background,
                           title: const Text(
                             'Alerte existante',
                             style: TextStyle(
-                              color: Color(0xFF1B4332),
+                              color: AppColors.forest500,
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
                             ),
@@ -232,7 +368,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           content: Text(
                             'Une alerte existe déjà au prix de ${parsedPrice.toStringAsFixed(2)} \$. Êtes-vous sûr de vouloir en placer une autre au même prix ?',
                             style: TextStyle(
-                              color: const Color(0xFF1B4332).withValues(alpha: 0.8),
+                              color: AppColors.forest500.withValues(alpha: 0.8),
                               fontSize: 14,
                             ),
                           ),
@@ -241,21 +377,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               onPressed: () => Navigator.pop(confirmContext),
                               child: Text(
                                 'Annuler',
-                                style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.6)),
+                                style: TextStyle(color: AppColors.forest500.withValues(alpha: 0.6)),
                               ),
                             ),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1B4332),
+                                backgroundColor: AppColors.forest500,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               ),
-                              onPressed: () {
+                              onPressed: () async {
                                 Navigator.pop(confirmContext);
-                                provider.addAlert(grainName, parsedPrice);
+                                final added = await provider.addAlert(grainName, parsedPrice);
+                                if (!mounted) return;
+                                if (!added) {
+                                  _showUpgradeSnackbar("máximo ${UserDataProvider.freeAlertsLimit} alertas");
+                                  return;
+                                }
                                 ScaffoldMessenger.of(mainContext).showSnackBar(
                                   SnackBar(
                                     content: Text('Alerte ajoutée : $grainName > ${parsedPrice.toStringAsFixed(2)} \$'),
-                                    backgroundColor: const Color(0xFF1B4332),
+                                    backgroundColor: AppColors.forest500,
                                     behavior: SnackBarBehavior.floating,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
@@ -268,15 +409,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       },
                     );
                   } else {
-                    provider.addAlert(grainName, parsedPrice);
-                    ScaffoldMessenger.of(mainContext).showSnackBar(
-                      SnackBar(
-                        content: Text('Alerte ajoutée : $grainName > ${parsedPrice.toStringAsFixed(2)} \$'),
-                        backgroundColor: const Color(0xFF1B4332),
-                        behavior: SnackBarBehavior.floating,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    );
+                    provider.addAlert(grainName, parsedPrice).then((added) {
+                      if (!mounted) return;
+                      if (!added) {
+                        _showUpgradeSnackbar("máximo ${UserDataProvider.freeAlertsLimit} alertas");
+                        return;
+                      }
+                      ScaffoldMessenger.of(mainContext).showSnackBar(
+                        SnackBar(
+                          content: Text('Alerte ajoutée : $grainName > ${parsedPrice.toStringAsFixed(2)} \$'),
+                          backgroundColor: AppColors.forest500,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      );
+                    });
                   }
                 }
               },
@@ -291,28 +438,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final appSettings = context.watch<AppSettings>();
-    const Color darkGreen = Color(0xFF1B4D3E);
+    const Color darkGreen = AppColors.forest600;
 
-    Widget bodyContent;
-    String appBarTitle = 'PROPRICE';
-
-    if (_selectedIndex == 1) {
-      bodyContent = const NewsPage();
-      appBarTitle = 'PROPRICE';
-    } else if (_selectedIndex == 0) {
-      bodyContent = _buildHomeContent(darkGreen, appSettings);
-      appBarTitle = 'PROPRICE';
-    } else if (_selectedIndex == 2) {
-      bodyContent = const SettingsPage();
-      appBarTitle = 'PROPRICE';
-    } else {
-      bodyContent = const ProfilePage();
-      appBarTitle = 'Mi Perfil'; // Seul le profil conserve son titre spécifique
-    }
+    // Seul l'onglet Profil garde un titre différent dans l'AppBar.
+    final String appBarTitle = _selectedIndex == 3 ? 'Mi Perfil' : 'PROPRICE';
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF2EFE9),
+        backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         title: Text(
@@ -330,7 +463,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const SettingsPage()),
+                  AppPageRoute(builder: (context) => const SettingsPage()),
                 );
               },
             ),
@@ -362,41 +495,56 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ],
       ),
-      body: bodyContent,
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05), blurRadius: 20)
-        ]),
-        child: BottomNavigationBar(
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: darkGreen,
-          unselectedItemColor: darkGreen.withValues(alpha: 0.3),
-          selectedLabelStyle: const TextStyle(
-              fontWeight: FontWeight.bold, fontSize: 12),
-          currentIndex: _selectedIndex,
-          onTap: _onItemTapped,
-          items: const [
-            BottomNavigationBarItem(
-                icon: Icon(Icons.home_max_rounded, size: 26), label: 'HOME'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.article_rounded, size: 26), label: 'NEWS'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.settings_suggest_rounded, size: 26),
-                label: 'SETTINGS'),
-            BottomNavigationBarItem(
-                icon: Icon(Icons.person_rounded, size: 26),
-                label: 'PROFILE'),
-          ],
-        ),
+      body: PageView(
+        controller: _pageController,
+        // Le swipe met à jour _selectedIndex, ce qui fait glisser la
+        // pastille de la barre de nav en même temps que le contenu change.
+        onPageChanged: (index) => setState(() => _selectedIndex = index),
+        children: [
+          _buildHomeContent(darkGreen, appSettings),
+          const NewsPage(),
+          const SettingsPage(),
+          const ProfilePage(),
+        ],
+      ),
+      bottomNavigationBar: AppBottomNavBar(
+        currentIndex: _selectedIndex,
+        onTap: _onItemTapped,
+        items: const [
+          AppNavItem(icon: Icons.home_max_rounded, label: 'HOME'),
+          AppNavItem(icon: Icons.article_rounded, label: 'NEWS'),
+          AppNavItem(icon: Icons.settings_suggest_rounded, label: 'SETTINGS'),
+          AppNavItem(icon: Icons.person_rounded, label: 'PROFILE'),
+        ],
       ),
     );
   }
 
-  Widget _buildHomeContent(Color darkGreen, AppSettings appSettings) { 
+  /// Skeletons affichés tant que UserDataProvider n'a pas encore reçu les
+  /// données de Supabase (grainsData vide), à la place d'un écran vide.
+  Widget _buildHomeSkeleton() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(25, 20, 25, 15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppSkeleton(height: 12, width: 180),
+          const SizedBox(height: 14),
+          const AppSkeleton(height: 48, width: 220),
+          const SizedBox(height: 30),
+          const Expanded(child: AppSkeletonList(count: 5)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHomeContent(Color darkGreen, AppSettings appSettings) {
     final provider = context.watch<UserDataProvider>();
     final List<Map<String, dynamic>> grainsData = provider.grainsData;
+
+    if (grainsData.isEmpty) {
+      return _buildHomeSkeleton();
+    }
 
     List<Map<String, dynamic>> sortedList = List.from(grainsData);
     sortedList.sort((a, b) {
@@ -408,7 +556,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     final currentData = grainsData.firstWhere((g) => g["name"] == selectedGrain);
     final bool isPositive = (currentData["variation"] as String).contains('+');
-    final Color trendColor = isPositive ? const Color(0xFF2E7D32) : const Color(0xFFC62828);
+    final Color trendColor = isPositive ? AppColors.priceUp : AppColors.priceDown;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -422,23 +570,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Text("PRECIO ACTUAL DEL ${currentData["name"]}",
                   style: TextStyle(color: darkGreen.withOpacity(0.6), fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
               const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text("\$ ", style: TextStyle(color: darkGreen.withOpacity(0.5), fontSize: 24, fontWeight: FontWeight.bold)),
-                  Text(
-                    appSettings.hideBalance ? "****" : "${currentData["price"]}",
-                    style: TextStyle(
-                      color: darkGreen, 
-                      fontSize: appSettings.hideBalance ? 40 : 56,
-                      fontWeight: FontWeight.w900, 
-                      letterSpacing: appSettings.hideBalance ? 0 : -2
-                    )
-                  ),
-                  Text(" / Tn", style: TextStyle(color: darkGreen.withOpacity(0.5), fontSize: 18, fontWeight: FontWeight.bold)),
-                  const Spacer(),
-                  Container(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final bool isNarrow = constraints.maxWidth < 340;
+                  final double availableForPrice = isNarrow
+                      ? constraints.maxWidth
+                      : constraints.maxWidth - 130;
+
+                  final String priceText = appSettings.hideBalance ? "****" : "${currentData["price"]}";
+
+                  double priceFontSize = appSettings.hideBalance ? 40 : 56;
+                  final double estimatedCharWidth = priceFontSize * 0.6;
+                  final double estimatedTextWidth = (priceText.length * estimatedCharWidth) + 75;
+                  if (estimatedTextWidth > availableForPrice) {
+                    final double scale = availableForPrice / estimatedTextWidth;
+                    priceFontSize = (priceFontSize * scale).clamp(30, priceFontSize);
+                  }
+
+                  final priceRow = Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text("\$ ", style: TextStyle(color: darkGreen.withOpacity(0.5), fontSize: 20, fontWeight: FontWeight.bold)),
+                      ),
+                      Text(
+                        priceText,
+                        style: AppTheme.priceStyle(
+                          color: darkGreen,
+                          fontSize: priceFontSize,
+                          letterSpacing: appSettings.hideBalance ? 0 : -2,
+                          height: 1.0,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8, left: 4),
+                        child: Text(" / Tn", style: TextStyle(color: darkGreen.withOpacity(0.5), fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  );
+
+                  final graphButton = Container(
                     decoration: BoxDecoration(boxShadow: [BoxShadow(color: darkGreen.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 8))]),
                     child: ElevatedButton(
                       onPressed: () {
@@ -453,7 +626,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
                         Navigator.push(
                           context,
-                          MaterialPageRoute(
+                          AppPageRoute(
                             builder: (context) => ChartPage(
                               commodityName: selectedGrain,
                               favoriteNotifier: favoriteNotifier,
@@ -470,8 +643,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       ),
                       child: const Text("VER GRAFICO", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ),
-                  ),
-                ],
+                  );
+
+                  if (isNarrow) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        priceRow,
+                        const SizedBox(height: 12),
+                        Align(alignment: Alignment.centerLeft, child: graphButton),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(child: priceRow),
+                      const SizedBox(width: 10),
+                      graphButton,
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 15),
               Row(
@@ -509,100 +702,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(30),
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
-                itemCount: sortedList.length,
-                itemBuilder: (context, index) {
-                  final item = sortedList[index];
-                  final isSelected = selectedGrain == item["name"];
-                  final isFav = context.watch<UserDataProvider>().isFavorite(item["name"]);
-                  
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                    child: Material(
-                      color: isSelected ? darkGreen : Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: () => _onSelectGrain(item["name"]),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: isSelected ? darkGreen : Colors.grey.withOpacity(0.15), width: isSelected ? 2 : 1.5),
-                          ),
-                          child: Row(
-                            children: [
-                              Text(item["emoji"], style: const TextStyle(fontSize: 24)),
-                              const SizedBox(width: 14),
-                              Text(item["name"], style: TextStyle(color: isSelected ? Colors.white : darkGreen, fontWeight: FontWeight.w800, fontSize: 18)),
-                              const Spacer(),
-                              if (isSelected) ...[
-                                _whiteIconButton(isFav ? Icons.star_rounded : Icons.star_outline_rounded, isFav ? Colors.orange : darkGreen, () => _toggleFavorite(item)),
-                                const SizedBox(width: 8),
-                                _whiteIconButton(Icons.notifications_active_outlined, darkGreen, () {
-                                  HapticFeedback.lightImpact();
-                                  double defaultPrice = double.tryParse(item["price"].toString()) ?? 0.0;
-                                  
-                                  final provider = context.read<UserDataProvider>();
-                                  final favoriteNotifier = ValueNotifier<bool>(provider.isFavorite(item["name"]));
-                                  favoriteNotifier.addListener(() {
-                                    if (favoriteNotifier.value != provider.isFavorite(item["name"])) {
-                                      provider.toggleFavorite(item["name"]);
-                                    }
-                                  });
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ChartPage(
-                                        commodityName: item["name"],
-                                        favoriteNotifier: favoriteNotifier,
-                                      ),
-                                    ),
-                                  );
-
-                                  Future.delayed(const Duration(milliseconds: 300), () {
-                                    if (mounted) {
-                                      _showAlertDialog(context, item["name"], defaultPrice);
-                                    }
-                                  });
-                                }),
-                                const SizedBox(width: 8),
-                                _whiteIconButton(Icons.bar_chart_rounded, darkGreen, () {
-                                  HapticFeedback.lightImpact();
-                                  final provider = context.read<UserDataProvider>();
-                                  final favoriteNotifier = ValueNotifier<bool>(provider.isFavorite(item["name"]));
-                                  favoriteNotifier.addListener(() {
-                                    if (favoriteNotifier.value != provider.isFavorite(item["name"])) {
-                                      provider.toggleFavorite(item["name"]);
-                                    }
-                                  });
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ChartPage(
-                                        commodityName: item["name"],
-                                        favoriteNotifier: favoriteNotifier,
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ] else ...[
-                                GestureDetector(
-                                  onTap: () => _toggleFavorite(item),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(4.0),
-                                    child: Icon(
-                                      isFav ? Icons.star_rounded : Icons.star_outline_rounded,
-                                      color: isFav ? Colors.orange.withOpacity(0.8) : darkGreen.withOpacity(0.2),
-                                      size: 28,
-                                    ),
-                                  ),
-                                ),
-                              ]
-                            ],
-                          ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: constraints.maxHeight - 30),
+                      child: IntrinsicHeight(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: sortedList.asMap().entries.map((entry) {
+                            return StaggeredFadeIn(
+                              index: entry.key,
+                              child: _buildGrainCard(context, entry.value, darkGreen),
+                            );
+                          }).toList(),
                         ),
                       ),
                     ),
@@ -613,6 +728,107 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildGrainCard(BuildContext context, Map<String, dynamic> item, Color darkGreen) {
+    final isSelected = selectedGrain == item["name"];
+    final isFav = context.watch<UserDataProvider>().isFavorite(item["name"]);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: Material(
+        color: isSelected ? darkGreen : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => _onSelectGrain(item["name"]),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: isSelected ? darkGreen : Colors.grey.withOpacity(0.15), width: isSelected ? 2 : 1.5),
+            ),
+            child: Row(
+              children: [
+                Text(item["emoji"], style: const TextStyle(fontSize: 24)),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    item["name"],
+                    style: TextStyle(color: isSelected ? Colors.white : darkGreen, fontWeight: FontWeight.w800, fontSize: 18),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isSelected) ...[
+                  _whiteIconButton(isFav ? Icons.star_rounded : Icons.star_outline_rounded, isFav ? Colors.orange : darkGreen, () => _toggleFavorite(item)),
+                  const SizedBox(width: 8),
+                  _whiteIconButton(Icons.notifications_active_outlined, darkGreen, () {
+                    HapticFeedback.lightImpact();
+                    double defaultPrice = double.tryParse(item["price"].toString()) ?? 0.0;
+
+                    final provider = context.read<UserDataProvider>();
+                    final favoriteNotifier = ValueNotifier<bool>(provider.isFavorite(item["name"]));
+                    favoriteNotifier.addListener(() {
+                      if (favoriteNotifier.value != provider.isFavorite(item["name"])) {
+                        provider.toggleFavorite(item["name"]);
+                      }
+                    });
+                    Navigator.push(
+                      context,
+                      AppPageRoute(
+                        builder: (context) => ChartPage(
+                          commodityName: item["name"],
+                          favoriteNotifier: favoriteNotifier,
+                        ),
+                      ),
+                    );
+
+                    Future.delayed(const Duration(milliseconds: 300), () {
+                      if (mounted) {
+                        _showAlertDialog(context, item["name"], defaultPrice);
+                      }
+                    });
+                  }),
+                  const SizedBox(width: 8),
+                  _whiteIconButton(Icons.bar_chart_rounded, darkGreen, () {
+                    HapticFeedback.lightImpact();
+                    final provider = context.read<UserDataProvider>();
+                    final favoriteNotifier = ValueNotifier<bool>(provider.isFavorite(item["name"]));
+                    favoriteNotifier.addListener(() {
+                      if (favoriteNotifier.value != provider.isFavorite(item["name"])) {
+                        provider.toggleFavorite(item["name"]);
+                      }
+                    });
+                    Navigator.push(
+                      context,
+                      AppPageRoute(
+                        builder: (context) => ChartPage(
+                          commodityName: item["name"],
+                          favoriteNotifier: favoriteNotifier,
+                        ),
+                      ),
+                    );
+                  }),
+                ] else ...[
+                  GestureDetector(
+                    onTap: () => _toggleFavorite(item),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Icon(
+                        isFav ? Icons.star_rounded : Icons.star_outline_rounded,
+                        color: isFav ? Colors.orange.withOpacity(0.8) : darkGreen.withOpacity(0.2),
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                ]
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -667,7 +883,7 @@ class _ChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 2.2..strokeCap = StrokeCap.round;
     final dashPaint = Paint()..color = color.withOpacity(0.15)..style = PaintingStyle.stroke..strokeWidth = 1;
-    
+
     for (double i = 0; i < size.width; i += 5) {
       canvas.drawLine(Offset(i, size.height / 2), Offset(i + 2, size.height / 2), dashPaint);
     }
@@ -677,7 +893,7 @@ class _ChartPainter extends CustomPainter {
     int segments = 6;
     double step = size.width / segments;
     List<Offset> pts = [];
-    
+
     for (int i = 0; i <= segments; i++) {
       double x = i * step;
       double noise = rand.nextDouble() * 12;

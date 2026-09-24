@@ -12,6 +12,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/data.dart';
 import '../providers/user_data_provider.dart';
 import '../services/auth_lock.dart';
+import 'subscription_plan_page.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_page_route.dart';
+import '../widgets/app_skeleton.dart';
+import '../widgets/staggered_fade_in.dart';
 
 class ChartPage extends StatefulWidget {
   final String commodityName;
@@ -28,13 +33,13 @@ class ChartPage extends StatefulWidget {
 }
 
 class _ChartPageState extends State<ChartPage> {
-  CandleData? selectedCandle; 
+  CandleData? selectedCandle;
   String selectedPeriod = "1D";
   final List<String> periods = ["1D", "1W", "1M", "3M", "1Y"];
   bool isCandleView = false;
   DateTime lastUpdateTime = DateTime.now();
   late ZoomPanBehavior _zoomPanBehavior;
-  
+
   double? _manualYMin;
   double? _manualYMax;
   double? _lastYDragPosition;
@@ -63,8 +68,33 @@ class _ChartPageState extends State<ChartPage> {
       enablePinching: true,
       enablePanning: !showFibonacci, // Désactive le pan si Fibo actif pour dessiner
       enableDoubleTapZooming: true,
-      enableSelectionZooming: true, 
+      enableSelectionZooming: true,
       zoomMode: ZoomMode.x,
+    );
+  }
+
+  /// Affiche un message incitant à passer au plan Premium, avec un bouton
+  /// direct vers la page de sélection de plan. (même pattern que home_page.dart)
+  void _showUpgradeSnackbar(String featureLabel) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Función Premium ($featureLabel)."),
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: Colors.orange.shade800,
+        action: SnackBarAction(
+          label: "VER PLANES",
+          textColor: Colors.white,
+          onPressed: () {
+            Navigator.push(
+              context,
+              AppPageRoute(builder: (context) => const SubscriptionPlanPage()),
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -74,7 +104,7 @@ class _ChartPageState extends State<ChartPage> {
         enablePinching: true,
         enablePanning: !showFibonacci,
         enableDoubleTapZooming: true,
-        enableSelectionZooming: true, 
+        enableSelectionZooming: true,
         zoomMode: ZoomMode.x,
       );
     });
@@ -88,10 +118,10 @@ class _ChartPageState extends State<ChartPage> {
       }
       double range = _manualYMax! - _manualYMin!;
       double center = (_manualYMin! + _manualYMax!) / 2;
-      
+
       double scaleFactor = 1.0 + (delta * 0.005);
       double newRange = range * scaleFactor;
-      
+
       double baseRange = chartMaxVal - chartMinVal;
       if (newRange > 0.1 && newRange < baseRange * 15) {
         _manualYMin = center - newRange / 2;
@@ -103,7 +133,7 @@ class _ChartPageState extends State<ChartPage> {
   // Génération des PlotBands pour les Retracements de Fibonacci personnalisés (Pourcentages, Couleurs & Recalcul)
   List<PlotBand> _getFibonacciPlotBands(List<CandleData> data) {
     if (!showFibonacci || data.isEmpty || fibStartCandle == null) return [];
-    
+
     // Si seul le point de départ est défini, on affiche uniquement la barre de référence
     if (fibStartCandle != null && fibEndCandle == null) {
       double refPrice = fibStartCandle!.close;
@@ -130,17 +160,17 @@ class _ChartPageState extends State<ChartPage> {
     double p2 = fibEndCandle!.close;
     double high = p1 > p2 ? p1 : p2;
     double low = p1 > p2 ? p2 : p1;
-    
+
     double diff = high - low;
 
     List<PlotBand> bands = [];
     for (var p in fibPercentages) {
       double val = high - diff * p;
-      String label = p == 0.0 
+      String label = p == 0.0
           ? 'Fibo 0% (${high.toStringAsFixed(2)})'
-          : p == 1.0 
-              ? 'Fibo 100% (${low.toStringAsFixed(2)})'
-              : 'Fibo ${(p * 100).toStringAsFixed(1)}%';
+          : p == 1.0
+          ? 'Fibo 100% (${low.toStringAsFixed(2)})'
+          : 'Fibo ${(p * 100).toStringAsFixed(1)}%';
       bands.add(
         PlotBand(
           start: val,
@@ -171,7 +201,7 @@ class _ChartPageState extends State<ChartPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF1B4332).withValues(alpha: 0.15)),
+        border: Border.all(color: AppColors.forest500.withValues(alpha: 0.15)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)],
       ),
       child: Column(
@@ -182,14 +212,14 @@ class _ChartPageState extends State<ChartPage> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.settings, size: 18, color: Color(0xFF1B4332)),
+                  const Icon(Icons.settings, size: 18, color: AppColors.forest500),
                   const SizedBox(width: 8),
                   const Text(
                     'Réglages Indicateurs Actifs',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1B4332),
+                      color: AppColors.forest500,
                     ),
                   ),
                 ],
@@ -197,7 +227,7 @@ class _ChartPageState extends State<ChartPage> {
               IconButton(
                 constraints: const BoxConstraints(),
                 padding: EdgeInsets.zero,
-                icon: const Icon(Icons.tune, size: 18, color: Color(0xFF1B4332)),
+                icon: const Icon(Icons.tune, size: 18, color: AppColors.forest500),
                 tooltip: 'Paramètres avancés',
                 onPressed: () => _showAdvancedIndicatorSettingsDialog(context),
               ),
@@ -210,7 +240,7 @@ class _ChartPageState extends State<ChartPage> {
               children: [
                 Text(
                   'EMA Période : $emaPeriod',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1B4332)),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.forest500),
                 ),
                 Row(
                   children: [
@@ -229,7 +259,7 @@ class _ChartPageState extends State<ChartPage> {
                           margin: const EdgeInsets.only(left: 4),
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: emaPeriod == p ? const Color(0xFF1B4332) : Colors.grey.shade200,
+                            color: emaPeriod == p ? AppColors.forest500 : Colors.grey.shade200,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -237,7 +267,7 @@ class _ChartPageState extends State<ChartPage> {
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
-                              color: emaPeriod == p ? Colors.white : const Color(0xFF1B4332),
+                              color: emaPeriod == p ? Colors.white : AppColors.forest500,
                             ),
                           ),
                         ),
@@ -257,8 +287,8 @@ class _ChartPageState extends State<ChartPage> {
                     fibStartCandle == null
                         ? '✨ Cliquez sur le graphique pour placer le départ Fibo.'
                         : fibEndCandle == null
-                            ? '✨ Cliquez ou glissez pour définir l\'arrivée Fibo.'
-                            : 'Fibo actif (${fibPercentages.length} niveaux)',
+                        ? '✨ Cliquez ou glissez pour définir l\'arrivée Fibo.'
+                        : 'Fibo actif (${fibPercentages.length} niveaux)',
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange.shade900),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -293,15 +323,15 @@ class _ChartPageState extends State<ChartPage> {
           builder: (context, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              backgroundColor: const Color(0xFFF2EFE9),
+              backgroundColor: AppColors.background,
               title: const Row(
                 children: [
-                  Icon(Icons.settings, color: Color(0xFF1B4332)),
+                  Icon(Icons.settings, color: AppColors.forest500),
                   SizedBox(width: 10),
                   Text(
                     'Configuration Avancée',
                     style: TextStyle(
-                      color: Color(0xFF1B4332),
+                      color: AppColors.forest500,
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
                     ),
@@ -316,7 +346,7 @@ class _ChartPageState extends State<ChartPage> {
                     if (showEMA) ...[
                       const Text(
                         'Moyenne Mobile Exponentielle (EMA)',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332), fontSize: 13),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.forest500, fontSize: 13),
                       ),
                       const SizedBox(height: 6),
                       Row(
@@ -379,7 +409,7 @@ class _ChartPageState extends State<ChartPage> {
                     if (showFibonacci) ...[
                       const Text(
                         'Retracements de Fibonacci',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332), fontSize: 13),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.forest500, fontSize: 13),
                       ),
                       const SizedBox(height: 6),
                       const Text('Pourcentages à afficher :', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
@@ -391,7 +421,7 @@ class _ChartPageState extends State<ChartPage> {
                           bool isSelected = fibPercentages.contains(p);
                           String label = p == 0.0 ? '0%' : p == 1.0 ? '100%' : '${(p * 100).toStringAsFixed(1)}%';
                           return FilterChip(
-                            label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : const Color(0xFF1B4332))),
+                            label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : AppColors.forest500)),
                             selected: isSelected,
                             selectedColor: Colors.orange.shade700,
                             backgroundColor: Colors.white,
@@ -448,7 +478,7 @@ class _ChartPageState extends State<ChartPage> {
               actions: [
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B4332),
+                    backgroundColor: AppColors.forest500,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: () => Navigator.pop(dialogContext),
@@ -473,7 +503,7 @@ class _ChartPageState extends State<ChartPage> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFFF2EFE9),
+      backgroundColor: AppColors.background,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -494,27 +524,27 @@ class _ChartPageState extends State<ChartPage> {
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w900,
-                      color: Color(0xFF1B4332),
+                      color: AppColors.forest500,
                     ),
                   ),
                   const SizedBox(height: 15),
-                  
+
                   SwitchListTile(
                     title: Text(
                       'Moyenne Mobile Exponentielle (EMA $emaPeriod)',
                       style: TextStyle(
-                        fontWeight: FontWeight.bold, 
-                        color: modalHasEnough ? const Color(0xFF1B4332) : Colors.grey,
+                        fontWeight: FontWeight.bold,
+                        color: modalHasEnough ? AppColors.forest500 : Colors.grey,
                       ),
                     ),
-                    subtitle: !modalHasEnough 
+                    subtitle: !modalHasEnough
                         ? Text(
-                            'Indisponible : nécessite au moins $emaPeriod bougies (actuellement ${currentData.length}).',
-                            style: const TextStyle(color: Colors.red, fontSize: 11),
-                          )
+                      'Indisponible : nécessite au moins $emaPeriod bougies (actuellement ${currentData.length}).',
+                      style: const TextStyle(color: Colors.red, fontSize: 11),
+                    )
                         : null,
                     value: modalHasEnough ? showEMA : false,
-                    activeThumbColor: const Color(0xFF1B4332),
+                    activeThumbColor: AppColors.forest500,
                     onChanged: modalHasEnough ? (bool value) {
                       setModalState(() => showEMA = value);
                       setState(() => showEMA = value);
@@ -532,13 +562,13 @@ class _ChartPageState extends State<ChartPage> {
                             'Période de l\'EMA :',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF1B4332),
+                              color: AppColors.forest500,
                               fontSize: 14,
                             ),
                           ),
                           DropdownButton<int>(
                             value: emaPeriod,
-                            dropdownColor: const Color(0xFFF2EFE9),
+                            dropdownColor: AppColors.background,
                             items: [9, 14, 20, 50, 100, 200].map((int val) {
                               return DropdownMenuItem<int>(
                                 value: val,
@@ -546,7 +576,7 @@ class _ChartPageState extends State<ChartPage> {
                                   '$val',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Color(0xFF1B4332),
+                                    color: AppColors.forest500,
                                   ),
                                 ),
                               );
@@ -579,10 +609,10 @@ class _ChartPageState extends State<ChartPage> {
                   SwitchListTile(
                     title: const Text(
                       'Retracements de Fibonacci',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332)),
+                      style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.forest500),
                     ),
                     value: showFibonacci,
-                    activeThumbColor: const Color(0xFF1B4332),
+                    activeThumbColor: AppColors.forest500,
                     onChanged: (bool value) {
                       setModalState(() => showFibonacci = value);
                       setState(() {
@@ -643,7 +673,7 @@ class _ChartPageState extends State<ChartPage> {
         if (data['status'] == 'ok') {
           List articles = data['articles'] ?? [];
           final keywords = _getKeywordsForFiltering();
-          
+
           return articles.where((article) {
             final title = (article['title'] ?? '').toLowerCase();
             final description = (article['description'] ?? '').toLowerCase();
@@ -657,7 +687,7 @@ class _ChartPageState extends State<ChartPage> {
 
   TextAnchor _getHorizontalAlignment(double price, List<CandleData> data) {
     if (data.isEmpty) return TextAnchor.start;
-    
+
     List<int> crossingIndices = [];
     for (int i = 0; i < data.length; i++) {
       if (price >= data[i].low && price <= data[i].high) {
@@ -694,7 +724,7 @@ class _ChartPageState extends State<ChartPage> {
       builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor: const Color(0xFFF2EFE9),
+          backgroundColor: AppColors.background,
           title: Row(
             children: const [
               Text('🔔', style: TextStyle(fontSize: 24)),
@@ -702,7 +732,7 @@ class _ChartPageState extends State<ChartPage> {
               Text(
                 'Définir une alerte',
                 style: TextStyle(
-                  color: Color(0xFF1B4332),
+                  color: AppColors.forest500,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
@@ -716,7 +746,7 @@ class _ChartPageState extends State<ChartPage> {
               Text(
                 'Entrez le seuil de prix pour ${widget.commodityName} :',
                 style: TextStyle(
-                  color: const Color(0xFF1B4332).withValues(alpha: 0.8),
+                  color: AppColors.forest500.withValues(alpha: 0.8),
                   fontSize: 14,
                 ),
               ),
@@ -729,21 +759,21 @@ class _ChartPageState extends State<ChartPage> {
                 ],
                 decoration: InputDecoration(
                   labelText: 'Seuil cible (\$)',
-                  labelStyle: const TextStyle(color: Color(0xFF1B4332)),
+                  labelStyle: const TextStyle(color: AppColors.forest500),
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide(color: const Color(0xFF1B4332).withValues(alpha: 0.2)),
+                    borderSide: BorderSide(color: AppColors.forest500.withValues(alpha: 0.2)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
-                    borderSide: const BorderSide(color: Color(0xFF1B4332), width: 2),
+                    borderSide: const BorderSide(color: AppColors.forest500, width: 2),
                   ),
                 ),
                 style: const TextStyle(
                   fontWeight: FontWeight.w900,
-                  color: Color(0xFF1B4332),
+                  color: AppColors.forest500,
                   fontSize: 16,
                 ),
               ),
@@ -754,12 +784,12 @@ class _ChartPageState extends State<ChartPage> {
               onPressed: () => Navigator.pop(dialogContext),
               child: Text(
                 'Annuler',
-                style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.6)),
+                style: TextStyle(color: AppColors.forest500.withValues(alpha: 0.6)),
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B4332),
+                backgroundColor: AppColors.forest500,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () {
@@ -775,11 +805,11 @@ class _ChartPageState extends State<ChartPage> {
                       builder: (confirmContext) {
                         return AlertDialog(
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          backgroundColor: const Color(0xFFF2EFE9),
+                          backgroundColor: AppColors.background,
                           title: const Text(
                             'Alerte existante',
                             style: TextStyle(
-                              color: Color(0xFF1B4332),
+                              color: AppColors.forest500,
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
                             ),
@@ -787,7 +817,7 @@ class _ChartPageState extends State<ChartPage> {
                           content: Text(
                             'Une alerte existe déjà au prix de ${parsedPrice.toStringAsFixed(2)} \$. Êtes-vous sûr de vouloir en placer une autre au même prix ?',
                             style: TextStyle(
-                              color: const Color(0xFF1B4332).withValues(alpha: 0.8),
+                              color: AppColors.forest500.withValues(alpha: 0.8),
                               fontSize: 14,
                             ),
                           ),
@@ -796,12 +826,12 @@ class _ChartPageState extends State<ChartPage> {
                               onPressed: () => Navigator.pop(confirmContext),
                               child: Text(
                                 'Annuler',
-                                style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.6)),
+                                style: TextStyle(color: AppColors.forest500.withValues(alpha: 0.6)),
                               ),
                             ),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1B4332),
+                                backgroundColor: AppColors.forest500,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                               onPressed: () {
@@ -810,7 +840,7 @@ class _ChartPageState extends State<ChartPage> {
                                 ScaffoldMessenger.of(mainContext).showSnackBar(
                                   SnackBar(
                                     content: Text('Alerte ajoutée : ${widget.commodityName} > ${parsedPrice.toStringAsFixed(2)} \$'),
-                                    backgroundColor: const Color(0xFF1B4332),
+                                    backgroundColor: AppColors.forest500,
                                     behavior: SnackBarBehavior.floating,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
@@ -827,7 +857,7 @@ class _ChartPageState extends State<ChartPage> {
                     ScaffoldMessenger.of(mainContext).showSnackBar(
                       SnackBar(
                         content: Text('Alerte ajoutée : ${widget.commodityName} > ${parsedPrice.toStringAsFixed(2)} \$'),
-                        backgroundColor: const Color(0xFF1B4332),
+                        backgroundColor: AppColors.forest500,
                         behavior: SnackBarBehavior.floating,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
@@ -854,7 +884,7 @@ class _ChartPageState extends State<ChartPage> {
       builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor: const Color(0xFFF2EFE9),
+          backgroundColor: AppColors.background,
           title: Row(
             children: const [
               Text('🔔', style: TextStyle(fontSize: 24)),
@@ -862,7 +892,7 @@ class _ChartPageState extends State<ChartPage> {
               Text(
                 'Modifier l\'alerte',
                 style: TextStyle(
-                  color: Color(0xFF1B4332),
+                  color: AppColors.forest500,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
@@ -876,7 +906,7 @@ class _ChartPageState extends State<ChartPage> {
               Text(
                 'Modifiez le seuil de prix pour ${widget.commodityName} :',
                 style: TextStyle(
-                  color: const Color(0xFF1B4332).withValues(alpha: 0.8),
+                  color: AppColors.forest500.withValues(alpha: 0.8),
                   fontSize: 14,
                 ),
               ),
@@ -889,21 +919,21 @@ class _ChartPageState extends State<ChartPage> {
                 ],
                 decoration: InputDecoration(
                   labelText: 'Seuil cible (\$)',
-                  labelStyle: const TextStyle(color: Color(0xFF1B4332)),
+                  labelStyle: const TextStyle(color: AppColors.forest500),
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide(color: const Color(0xFF1B4332).withValues(alpha: 0.2)),
+                    borderSide: BorderSide(color: AppColors.forest500.withValues(alpha: 0.2)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
-                    borderSide: const BorderSide(color: Color(0xFF1B4332), width: 2),
+                    borderSide: const BorderSide(color: AppColors.forest500, width: 2),
                   ),
                 ),
                 style: const TextStyle(
                   fontWeight: FontWeight.w900,
-                  color: Color(0xFF1B4332),
+                  color: AppColors.forest500,
                   fontSize: 16,
                 ),
               ),
@@ -914,12 +944,12 @@ class _ChartPageState extends State<ChartPage> {
               onPressed: () => Navigator.pop(dialogContext),
               child: Text(
                 'Annuler',
-                style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.6)),
+                style: TextStyle(color: AppColors.forest500.withValues(alpha: 0.6)),
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B4332),
+                backgroundColor: AppColors.forest500,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () {
@@ -931,7 +961,7 @@ class _ChartPageState extends State<ChartPage> {
                   ScaffoldMessenger.of(mainContext).showSnackBar(
                     SnackBar(
                       content: Text('Alerte modifiée : ${widget.commodityName} > ${parsedPrice.toStringAsFixed(2)} \$'),
-                      backgroundColor: const Color(0xFF1B4332),
+                      backgroundColor: AppColors.forest500,
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
@@ -975,34 +1005,38 @@ class _ChartPageState extends State<ChartPage> {
     final double midPrice = (chartMin + chartMax) / 2;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2EFE9),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF1B4332)),
+          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.forest500),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(widget.commodityName, 
-            style: const TextStyle(color: Color(0xFF1B4332), fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: 1.2)),
+        title: Text(widget.commodityName,
+            style: const TextStyle(color: AppColors.forest500, fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: 1.2)),
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.insights_rounded, color: Color(0xFF1B4332), size: 24),
-            tooltip: "Indicateurs techniques",
+            icon: const Icon(Icons.insights_rounded, color: AppColors.forest500, size: 24),
+            tooltip: "Indicadores técnicos",
             onPressed: () {
               HapticFeedback.lightImpact();
+              if (!provider.canUseIndicators) {
+                _showUpgradeSnackbar("indicadores técnicos (EMA / Fibonacci)");
+                return;
+              }
               _showIndicatorsBottomSheet(context);
             },
           ),
           IconButton(
-            icon: const Text('⛶', style: TextStyle(fontSize: 22, color: Color(0xFF1B4332), fontWeight: FontWeight.bold)),
+            icon: const Text('⛶', style: TextStyle(fontSize: 22, color: AppColors.forest500, fontWeight: FontWeight.bold)),
             tooltip: "Plein écran paysage",
             onPressed: () {
               HapticFeedback.lightImpact();
               Navigator.push(
                 context,
-                MaterialPageRoute(
+                AppPageRoute(
                   builder: (context) => FullScreenChartPage(
                     commodityName: widget.commodityName,
                     initialPeriod: selectedPeriod,
@@ -1013,7 +1047,7 @@ class _ChartPageState extends State<ChartPage> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.share_rounded, color: Color(0xFF1B4332), size: 26),
+            icon: const Icon(Icons.share_rounded, color: AppColors.forest500, size: 26),
             onPressed: () async {
               HapticFeedback.lightImpact();
               await SharePlus.instance.share(
@@ -1027,7 +1061,7 @@ class _ChartPageState extends State<ChartPage> {
               return IconButton(
                 icon: Icon(
                   isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                  color: isFavorite ? Colors.amber : const Color(0xFF1B4332),
+                  color: isFavorite ? Colors.amber : AppColors.forest500,
                   size: 28,
                 ),
                 onPressed: () {
@@ -1044,8 +1078,8 @@ class _ChartPageState extends State<ChartPage> {
           children: [
             _buildContractInfo(),
             _buildPriceHeader(displayCandle.close, diff, provider, commodityAlerts),
-            _buildViewToggle(),
-            _buildPeriodSelector(),
+            _buildViewToggle(provider),
+            _buildPeriodSelector(provider),
             _buildIndicatorControlBlock(), // Bloc avec rouage sous le graphique pour gérer EMA / Fibonacci
 
             Container(
@@ -1124,9 +1158,9 @@ class _ChartPageState extends State<ChartPage> {
                             trackballBehavior: TrackballBehavior(
                               enable: true,
                               activationMode: ActivationMode.singleTap,
-                              lineColor: Colors.blueGrey.withValues(alpha: 0.5), 
-                              lineWidth: 1.5, 
-                              lineDashArray: const [5, 5], 
+                              lineColor: Colors.blueGrey.withValues(alpha: 0.5),
+                              lineWidth: 1.5,
+                              lineDashArray: const [5, 5],
                               markerSettings: const TrackballMarkerSettings(
                                 markerVisibility: TrackballVisibilityMode.visible,
                                 color: Colors.white,
@@ -1138,14 +1172,14 @@ class _ChartPageState extends State<ChartPage> {
                               tooltipDisplayMode: TrackballDisplayMode.floatAllPoints,
                             ),
                             primaryXAxis: DateTimeAxis(
-                              majorGridLines: const MajorGridLines(width: 0), 
+                              majorGridLines: const MajorGridLines(width: 0),
                               axisLine: const AxisLine(width: 1, color: Colors.grey),
                             ),
                             primaryYAxis: NumericAxis(
                               minimum: _manualYMin ?? chartMin,
                               maximum: _manualYMax ?? chartMax,
-                              majorGridLines: const MajorGridLines(width: 0.5, color: Colors.black12), 
-                              axisLine: const AxisLine(width: 0), 
+                              majorGridLines: const MajorGridLines(width: 0.5, color: Colors.black12),
+                              axisLine: const AxisLine(width: 0),
                               plotBands: [
                                 ...activeAlertPrices.map((price) {
                                   return PlotBand(
@@ -1169,66 +1203,66 @@ class _ChartPageState extends State<ChartPage> {
                             ),
                             indicators: showEMA && rawData.length >= emaPeriod
                                 ? <TechnicalIndicator<CandleData, DateTime>>[
-                                    EmaIndicator<CandleData, DateTime>(
-                                      dataSource: rawData,
-                                      xValueMapper: (CandleData data, _) => data.date,
-                                      closeValueMapper: (CandleData data, _) => data.close,
-                                      period: emaPeriod,
-                                      isVisible: true,
-                                      animationDuration: 0,
-                                      name: 'EMA',
-                                      signalLineColor: emaColor,
-                                      signalLineWidth: 2,
-                                    ),
-                                  ]
+                              EmaIndicator<CandleData, DateTime>(
+                                dataSource: rawData,
+                                xValueMapper: (CandleData data, _) => data.date,
+                                closeValueMapper: (CandleData data, _) => data.close,
+                                period: emaPeriod,
+                                isVisible: true,
+                                animationDuration: 0,
+                                name: 'EMA',
+                                signalLineColor: emaColor,
+                                signalLineWidth: 2,
+                              ),
+                            ]
                                 : [],
                             series: isCandleView
                                 ? <CartesianSeries<CandleData, DateTime>>[
-                                    CandleSeries<CandleData, DateTime>(
-                                      dataSource: rawData,
-                                      bearColor: const Color(0xFFE53935), 
-                                      bullColor: const Color(0xFF43A047), 
-                                      enableSolidCandles: true,
-                                      xValueMapper: (data, _) => data.date,
-                                      lowValueMapper: (data, _) => data.low,
-                                      highValueMapper: (data, _) => data.high,
-                                      openValueMapper: (data, _) => data.open,
-                                      closeValueMapper: (data, _) => data.close,
-                                      onPointTap: (ChartPointDetails details) {
-                                        if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
-                                          setState(() {
-                                            selectedCandle = rawData[details.pointIndex!];
-                                          });
-                                          HapticFeedback.selectionClick();
-                                        }
-                                      },
-                                    ),
-                                  ]
+                              CandleSeries<CandleData, DateTime>(
+                                dataSource: rawData,
+                                bearColor: const Color(0xFFE53935),
+                                bullColor: const Color(0xFF43A047),
+                                enableSolidCandles: true,
+                                xValueMapper: (data, _) => data.date,
+                                lowValueMapper: (data, _) => data.low,
+                                highValueMapper: (data, _) => data.high,
+                                openValueMapper: (data, _) => data.open,
+                                closeValueMapper: (data, _) => data.close,
+                                onPointTap: (ChartPointDetails details) {
+                                  if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
+                                    setState(() {
+                                      selectedCandle = rawData[details.pointIndex!];
+                                    });
+                                    HapticFeedback.selectionClick();
+                                  }
+                                },
+                              ),
+                            ]
                                 : <CartesianSeries<CandleData, DateTime>>[
-                                    FastLineSeries<CandleData, DateTime>(
-                                      dataSource: rawData,
-                                      xValueMapper: (data, _) => data.date,
-                                      yValueMapper: (data, _) => data.close,
-                                      color: const Color(0xFF1B4332),
-                                      width: 2,
-                                      markerSettings: MarkerSettings(
-                                        isVisible: selectedPeriod == "1D" || selectedPeriod == "1W",
-                                        height: 5,
-                                        width: 5,
-                                        color: const Color(0xFF1B4332),
-                                        borderColor: Colors.white,
-                                        borderWidth: 1,
-                                      ),
-                                      onPointTap: (ChartPointDetails details) {
-                                        if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
-                                          setState(() {
-                                            selectedCandle = rawData[details.pointIndex!];
-                                          });
-                                          HapticFeedback.selectionClick();
-                                        }
-                                      },
-                                    ),
-                                  ],
+                              FastLineSeries<CandleData, DateTime>(
+                                dataSource: rawData,
+                                xValueMapper: (data, _) => data.date,
+                                yValueMapper: (data, _) => data.close,
+                                color: AppColors.forest500,
+                                width: 2,
+                                markerSettings: MarkerSettings(
+                                  isVisible: selectedPeriod == "1D" || selectedPeriod == "1W",
+                                  height: 5,
+                                  width: 5,
+                                  color: AppColors.forest500,
+                                  borderColor: Colors.white,
+                                  borderWidth: 1,
+                                ),
+                                onPointTap: (ChartPointDetails details) {
+                                  if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
+                                    setState(() {
+                                      selectedCandle = rawData[details.pointIndex!];
+                                    });
+                                    HapticFeedback.selectionClick();
+                                  }
+                                },
+                              ),
+                            ],
                           ),
                           Positioned(
                             left: 0,
@@ -1243,7 +1277,7 @@ class _ChartPageState extends State<ChartPage> {
                                 if (_lastYDragPosition != null) {
                                   double delta = details.localPosition.dy - _lastYDragPosition!;
                                   _lastYDragPosition = details.localPosition.dy;
-                                  _handleYAxisDrag(delta, 420, chartMin, chartMax); 
+                                  _handleYAxisDrag(delta, 420, chartMin, chartMax);
                                 }
                               },
                               onVerticalDragEnd: (_) {
@@ -1318,7 +1352,7 @@ class _ChartPageState extends State<ChartPage> {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
-                  color: const Color(0xFF1B4332).withValues(alpha: 0.6),
+                  color: AppColors.forest500.withValues(alpha: 0.6),
                   letterSpacing: 1.0,
                 ),
               ),
@@ -1337,7 +1371,7 @@ class _ChartPageState extends State<ChartPage> {
               child: Text(
                 'Aucune alerte active pour le moment.',
                 style: TextStyle(
-                  color: const Color(0xFF1B4332).withValues(alpha: 0.5),
+                  color: AppColors.forest500.withValues(alpha: 0.5),
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -1364,17 +1398,17 @@ class _ChartPageState extends State<ChartPage> {
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1B4332).withValues(alpha: 0.1),
+                            color: AppColors.forest500.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.notifications_active_rounded, size: 16, color: Color(0xFF1B4332)),
+                          child: const Icon(Icons.notifications_active_rounded, size: 16, color: AppColors.forest500),
                         ),
                         const SizedBox(width: 12),
                         Text(
                           '${widget.commodityName.toUpperCase()} > ${alertPrice.toStringAsFixed(2)} \$',
                           style: const TextStyle(
                             fontWeight: FontWeight.w800,
-                            color: Color(0xFF1B4332),
+                            color: AppColors.forest500,
                             fontSize: 14,
                           ),
                         ),
@@ -1386,7 +1420,7 @@ class _ChartPageState extends State<ChartPage> {
                         IconButton(
                           constraints: const BoxConstraints(),
                           padding: EdgeInsets.zero,
-                          icon: Icon(Icons.edit_outlined, size: 20, color: const Color(0xFF1B4332).withValues(alpha: 0.7)),
+                          icon: Icon(Icons.edit_outlined, size: 20, color: AppColors.forest500.withValues(alpha: 0.7)),
                           tooltip: 'Modifier l\'alerte',
                           onPressed: () {
                             HapticFeedback.lightImpact();
@@ -1409,7 +1443,7 @@ class _ChartPageState extends State<ChartPage> {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text('Alerte supprimée : ${widget.commodityName} > ${alertPrice.toStringAsFixed(2)} \$'),
-                                  backgroundColor: const Color(0xFF1B4332),
+                                  backgroundColor: AppColors.forest500,
                                   behavior: SnackBarBehavior.floating,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                 ),
@@ -1445,7 +1479,7 @@ class _ChartPageState extends State<ChartPage> {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1B4332).withValues(alpha: 0.6),
+                    color: AppColors.forest500.withValues(alpha: 0.6),
                     letterSpacing: 1.0,
                   ),
                 ),
@@ -1457,19 +1491,9 @@ class _ChartPageState extends State<ChartPage> {
             future: _fetchNews(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return Container(
-                  height: 220,
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(15),
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8)],
-                  ),
-                  child: const CircularProgressIndicator(color: Color(0xFF1B4332)),
-                );
+                return _buildRelatedNewsSkeleton();
               }
-              
+
               if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
                 return Container(
                   width: double.infinity,
@@ -1483,7 +1507,7 @@ class _ChartPageState extends State<ChartPage> {
                   child: Text(
                     'Aucune actualité récente trouvée pour ${widget.commodityName}.',
                     style: TextStyle(
-                      color: const Color(0xFF1B4332).withValues(alpha: 0.5),
+                      color: AppColors.forest500.withValues(alpha: 0.5),
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
@@ -1516,121 +1540,124 @@ class _ChartPageState extends State<ChartPage> {
                       } catch (_) {}
                     }
 
-                    return Container(
-                      width: 280,
-                      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(20),
-                        child: InkWell(
+                    return StaggeredFadeIn(
+                      index: index,
+                      child: Container(
+                        width: 280,
+                        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
-                          onTap: () async {
-                            if (url.isNotEmpty) {
-                              final uri = Uri.parse(url);
-                              if (await canLaunchUrl(uri)) {
-                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: () async {
+                              if (url.isNotEmpty) {
+                                final uri = Uri.parse(url);
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                }
                               }
-                            }
-                          },
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClipRRect(
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                                child: imageUrl != null && imageUrl.isNotEmpty
-                                    ? Image.network(
-                                        imageUrl,
-                                        height: 120,
-                                        width: double.infinity,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) => Container(
-                                          height: 120,
-                                          color: const Color(0xFF1B4332).withValues(alpha: 0.1),
-                                          child: const Center(
-                                            child: Icon(Icons.image_not_supported_outlined, color: Color(0xFF1B4332)),
-                                          ),
-                                        ),
-                                      )
-                                    : Container(
-                                        height: 120,
-                                        color: const Color(0xFF1B4332).withValues(alpha: 0.1),
-                                        child: const Center(
-                                          child: Icon(Icons.article_outlined, color: Color(0xFF1B4332), size: 30),
-                                        ),
+                            },
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                                  child: imageUrl != null && imageUrl.isNotEmpty
+                                      ? Image.network(
+                                    imageUrl,
+                                    height: 120,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      height: 120,
+                                      color: AppColors.forest500.withValues(alpha: 0.1),
+                                      child: const Center(
+                                        child: Icon(Icons.image_not_supported_outlined, color: AppColors.forest500),
                                       ),
-                              ),
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF1B4332).withValues(alpha: 0.1),
-                                                  borderRadius: BorderRadius.circular(6),
-                                                ),
-                                                child: Text(
-                                                  sourceName,
-                                                  style: const TextStyle(
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Color(0xFF1B4332),
-                                                  ),
-                                                ),
-                                              ),
-                                              if (formattedDate.isNotEmpty)
-                                                Text(
-                                                  formattedDate,
-                                                  style: TextStyle(
-                                                    fontSize: 9,
-                                                    color: const Color(0xFF1B4332).withValues(alpha: 0.4),
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            title,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                              color: Color(0xFF1B4332),
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Text(
-                                        description,
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: const Color(0xFF1B4332).withValues(alpha: 0.7),
-                                          fontSize: 11,
-                                          height: 1.25,
-                                        ),
-                                      ),
-                                    ],
+                                    ),
+                                  )
+                                      : Container(
+                                    height: 120,
+                                    color: AppColors.forest500.withValues(alpha: 0.1),
+                                    child: const Center(
+                                      child: Icon(Icons.article_outlined, color: AppColors.forest500, size: 30),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.forest500.withValues(alpha: 0.1),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    sourceName,
+                                                    style: const TextStyle(
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: AppColors.forest500,
+                                                    ),
+                                                  ),
+                                                ),
+                                                if (formattedDate.isNotEmpty)
+                                                  Text(
+                                                    formattedDate,
+                                                    style: TextStyle(
+                                                      fontSize: 9,
+                                                      color: AppColors.forest500.withValues(alpha: 0.4),
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              title,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                color: AppColors.forest500,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Text(
+                                          description,
+                                          maxLines: 3,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: AppColors.forest500.withValues(alpha: 0.7),
+                                            fontSize: 11,
+                                            height: 1.25,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -1645,6 +1672,59 @@ class _ChartPageState extends State<ChartPage> {
     );
   }
 
+  /// Skeleton horizontal pendant le chargement des actualités liées à la
+  /// matière première, dans le même format (280×310, image 120 + texte)
+  /// que les vraies cartes, pour éviter le "saut" visuel à l'arrivée des
+  /// données.
+  Widget _buildRelatedNewsSkeleton() {
+    return SizedBox(
+      height: 310,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: 3,
+        itemBuilder: (context, index) {
+          return Container(
+            width: 280,
+            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppSkeleton(
+                  height: 120,
+                  width: double.infinity,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        AppSkeleton(height: 10, width: 70),
+                        SizedBox(height: 10),
+                        AppSkeleton(height: 12, width: double.infinity),
+                        SizedBox(height: 8),
+                        AppSkeleton(height: 11, width: 200),
+                        SizedBox(height: 4),
+                        AppSkeleton(height: 11, width: 140),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildContractInfo() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
@@ -1653,27 +1733,27 @@ class _ChartPageState extends State<ChartPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.description_outlined, size: 20, color: Color(0xFF1B4332)),
+              const Icon(Icons.description_outlined, size: 20, color: AppColors.forest500),
               const SizedBox(width: 8),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("CONTRAT SÉLECTIONNÉ", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFF1B4332).withValues(alpha: 0.5))),
-                  Text(_getContractInfo(), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xFF1B4332))),
+                  Text("CONTRAT SÉLECTIONNÉ", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.forest500.withValues(alpha: 0.5))),
+                  Text(_getContractInfo(), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.forest500)),
                 ],
               ),
             ],
           ),
           Text(
             "Màj: ${DateFormat('HH:mm').format(lastUpdateTime)}",
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF1B4332).withValues(alpha: 0.4)),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.forest500.withValues(alpha: 0.4)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildViewToggle() {
+  Widget _buildViewToggle(UserDataProvider provider) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
       child: Container(
@@ -1686,31 +1766,42 @@ class _ChartPageState extends State<ChartPage> {
         ),
         child: Row(
           children: [
-            _toggleOption("Bougies", Icons.candlestick_chart_rounded, true),
-            _toggleOption("Courbe", Icons.show_chart_rounded, false),
+            _toggleOption("Bougies", Icons.candlestick_chart_rounded, true, provider),
+            _toggleOption("Courbe", Icons.show_chart_rounded, false, provider),
           ],
         ),
       ),
     );
   }
 
-  Widget _toggleOption(String label, IconData icon, bool isCandleOption) {
+  Widget _toggleOption(String label, IconData icon, bool isCandleOption, UserDataProvider provider) {
     bool isSelected = isCandleView == isCandleOption;
+    bool isLocked = isCandleOption && !provider.canUseCandleView;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => isCandleView = isCandleOption),
+        onTap: () {
+          if (isLocked) {
+            _showUpgradeSnackbar("vista de velas (candlestick)");
+            return;
+          }
+          setState(() => isCandleView = isCandleOption);
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF1B4332) : Colors.transparent,
+            color: isSelected ? AppColors.forest500 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 18, color: isSelected ? Colors.white : const Color(0xFF1B4332)),
+              Icon(icon, size: 18, color: isSelected ? Colors.white : (isLocked ? AppColors.forest500.withValues(alpha: 0.3) : AppColors.forest500)),
               const SizedBox(width: 8),
-              Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : const Color(0xFF1B4332))),
+              Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : (isLocked ? AppColors.forest500.withValues(alpha: 0.3) : AppColors.forest500))),
+              if (isLocked) ...[
+                const SizedBox(width: 4),
+                Icon(Icons.lock_outline_rounded, size: 12, color: AppColors.forest500.withValues(alpha: 0.3)),
+              ],
             ],
           ),
         ),
@@ -1729,8 +1820,8 @@ class _ChartPageState extends State<ChartPage> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                "\$${price.toStringAsFixed(2)}", 
-                style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: Color(0xFF1B4332)),
+                "\$${price.toStringAsFixed(2)}",
+                style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: AppColors.forest500),
               ),
               const SizedBox(width: 12),
               Container(
@@ -1740,9 +1831,9 @@ class _ChartPageState extends State<ChartPage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  "${diff >= 0 ? '+' : ''}${diff.toStringAsFixed(2)}%", 
+                  "${diff >= 0 ? '+' : ''}${diff.toStringAsFixed(2)}%",
                   style: TextStyle(
-                    color: diff >= 0 ? Colors.green.shade700 : Colors.red.shade700, 
+                    color: diff >= 0 ? Colors.green.shade700 : Colors.red.shade700,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
@@ -1752,7 +1843,7 @@ class _ChartPageState extends State<ChartPage> {
           ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1B4332),
+              backgroundColor: AppColors.forest500,
               foregroundColor: Colors.white,
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1772,31 +1863,37 @@ class _ChartPageState extends State<ChartPage> {
     );
   }
 
-  Widget _buildPeriodSelector() {
+  Widget _buildPeriodSelector(UserDataProvider provider) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(15)),
         child: Row(
-          children: periods.map((p) => _buildPeriodButton(p)).toList(),
+          children: periods.map((p) => _buildPeriodButton(p, provider)).toList(),
         ),
       ),
     );
   }
 
-  Widget _buildPeriodButton(String period) {
+  Widget _buildPeriodButton(String period, UserDataProvider provider) {
     bool isSelected = selectedPeriod == period;
+    bool isLocked = !provider.canUsePeriod(period);
     return Expanded(
       child: GestureDetector(
         onTap: () {
+          if (isLocked) {
+            HapticFeedback.lightImpact();
+            _showUpgradeSnackbar("período $period");
+            return;
+          }
           HapticFeedback.selectionClick();
           setState(() {
             selectedPeriod = period;
             lastUpdateTime = DateTime.now();
-            selectedCandle = null; 
-            _manualYMin = null; 
-            _manualYMax = null; 
+            selectedCandle = null;
+            _manualYMin = null;
+            _manualYMax = null;
             fibStartCandle = null;
             fibEndCandle = null;
 
@@ -1810,14 +1907,27 @@ class _ChartPageState extends State<ChartPage> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF1B4332) : Colors.transparent,
+            color: isSelected ? AppColors.forest500 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
-            child: Text(period, style: TextStyle(
-              fontWeight: FontWeight.bold, 
-              color: isSelected ? Colors.white : const Color(0xFF1B4332).withValues(alpha: 0.5)
-            )),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(period, style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isSelected
+                      ? Colors.white
+                      : (isLocked
+                      ? AppColors.forest500.withValues(alpha: 0.25)
+                      : AppColors.forest500.withValues(alpha: 0.5)),
+                )),
+                if (isLocked) ...[
+                  const SizedBox(width: 3),
+                  Icon(Icons.lock_outline_rounded, size: 10, color: AppColors.forest500.withValues(alpha: 0.25)),
+                ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1829,7 +1939,7 @@ class _ChartPageState extends State<ChartPage> {
       children: [
         Text(
           DateFormat('dd MMM yyyy HH:mm').format(c.date),
-          style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.6), fontWeight: FontWeight.bold),
+          style: TextStyle(color: AppColors.forest500.withValues(alpha: 0.6), fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 10),
         Row(
@@ -1848,9 +1958,9 @@ class _ChartPageState extends State<ChartPage> {
   Widget _statItem(String label, String value) {
     return Column(
       children: [
-        Text(label, style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.4), fontSize: 11, fontWeight: FontWeight.bold)),
+        Text(label, style: TextStyle(color: AppColors.forest500.withValues(alpha: 0.4), fontSize: 11, fontWeight: FontWeight.bold)),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(color: Color(0xFF1B4332), fontSize: 14, fontWeight: FontWeight.w800)),
+        Text(value, style: const TextStyle(color: AppColors.forest500, fontSize: 14, fontWeight: FontWeight.w800)),
       ],
     );
   }
@@ -1881,7 +1991,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
   CandleData? selectedCandle;
   final List<String> periods = ["1D", "1W", "1M", "3M", "1Y"];
   late ZoomPanBehavior _zoomPanBehavior;
-  
+
   double? _manualYMin;
   double? _manualYMax;
   double? _lastYDragPosition;
@@ -1902,7 +2012,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
   void initState() {
     super.initState();
     selectedPeriod = widget.initialPeriod;
-    
+
     _zoomPanBehavior = ZoomPanBehavior(
       enablePinching: true,
       enablePanning: !showFibonacci,
@@ -1910,7 +2020,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
       enableSelectionZooming: true,
       zoomMode: ZoomMode.x,
     );
-    
+
     AuthLock.isFullScreenActive = true;
 
     SystemChrome.setPreferredOrientations([
@@ -1918,6 +2028,30 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
       DeviceOrientation.landscapeRight,
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
+
+  /// Même logique de restriction que dans ChartPage (voir _ChartPageState).
+  void _showUpgradeSnackbar(String featureLabel) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Función Premium ($featureLabel)."),
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        backgroundColor: Colors.orange.shade800,
+        action: SnackBarAction(
+          label: "VER PLANES",
+          textColor: Colors.white,
+          onPressed: () {
+            Navigator.push(
+              context,
+              AppPageRoute(builder: (context) => const SubscriptionPlanPage()),
+            );
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -1953,10 +2087,10 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
       }
       double range = _manualYMax! - _manualYMin!;
       double center = (_manualYMin! + _manualYMax!) / 2;
-      
+
       double factor = delta / chartHeight;
       double newRange = range * (1 + factor * 2);
-      
+
       if (newRange > 0.01) {
         _manualYMin = center - newRange / 2;
         _manualYMax = center + newRange / 2;
@@ -1966,7 +2100,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
 
   List<PlotBand> _getFibonacciPlotBands(List<CandleData> data) {
     if (!showFibonacci || data.isEmpty || fibStartCandle == null) return [];
-    
+
     if (fibStartCandle != null && fibEndCandle == null) {
       double refPrice = fibStartCandle!.close;
       return [
@@ -1991,17 +2125,17 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
     double p2 = fibEndCandle!.close;
     double high = p1 > p2 ? p1 : p2;
     double low = p1 > p2 ? p2 : p1;
-    
+
     double diff = high - low;
 
     List<PlotBand> bands = [];
     for (var p in fibPercentages) {
       double val = high - diff * p;
-      String label = p == 0.0 
+      String label = p == 0.0
           ? 'Fibo 0% (${high.toStringAsFixed(2)})'
-          : p == 1.0 
-              ? 'Fibo 100% (${low.toStringAsFixed(2)})'
-              : 'Fibo ${(p * 100).toStringAsFixed(1)}%';
+          : p == 1.0
+          ? 'Fibo 100% (${low.toStringAsFixed(2)})'
+          : 'Fibo ${(p * 100).toStringAsFixed(1)}%';
       bands.add(
         PlotBand(
           start: val,
@@ -2031,24 +2165,24 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF1B4332).withValues(alpha: 0.15)),
+        border: Border.all(color: AppColors.forest500.withValues(alpha: 0.15)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              const Icon(Icons.settings, size: 14, color: Color(0xFF1B4332)),
+              const Icon(Icons.settings, size: 14, color: AppColors.forest500),
               const SizedBox(width: 6),
               Text(
-                showEMA && showFibonacci 
-                    ? 'EMA: $emaPeriod | Fibo actif' 
-                    : showEMA 
-                        ? 'EMA Période: $emaPeriod' 
-                        : fibStartCandle == null 
-                            ? 'Cliquez pour placer le départ Fibo' 
-                            : 'Fibo actif (${fibPercentages.length} niveaux)',
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF1B4332)),
+                showEMA && showFibonacci
+                    ? 'EMA: $emaPeriod | Fibo actif'
+                    : showEMA
+                    ? 'EMA Période: $emaPeriod'
+                    : fibStartCandle == null
+                    ? 'Cliquez pour placer le départ Fibo'
+                    : 'Fibo actif (${fibPercentages.length} niveaux)',
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.forest500),
               ),
             ],
           ),
@@ -2071,7 +2205,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
               IconButton(
                 constraints: const BoxConstraints(),
                 padding: EdgeInsets.zero,
-                icon: const Icon(Icons.tune, size: 14, color: Color(0xFF1B4332)),
+                icon: const Icon(Icons.tune, size: 14, color: AppColors.forest500),
                 tooltip: 'Paramètres',
                 onPressed: () => _showAdvancedIndicatorSettingsDialog(context),
               ),
@@ -2090,15 +2224,15 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
           builder: (context, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              backgroundColor: const Color(0xFFF2EFE9),
+              backgroundColor: AppColors.background,
               title: const Row(
                 children: [
-                  Icon(Icons.settings, color: Color(0xFF1B4332)),
+                  Icon(Icons.settings, color: AppColors.forest500),
                   SizedBox(width: 10),
                   Text(
                     'Configuration Avancée',
                     style: TextStyle(
-                      color: Color(0xFF1B4332),
+                      color: AppColors.forest500,
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
                     ),
@@ -2113,7 +2247,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                     if (showEMA) ...[
                       const Text(
                         'Moyenne Mobile Exponentielle (EMA)',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332), fontSize: 13),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.forest500, fontSize: 13),
                       ),
                       const SizedBox(height: 6),
                       Row(
@@ -2176,7 +2310,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                     if (showFibonacci) ...[
                       const Text(
                         'Retracements de Fibonacci',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332), fontSize: 13),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.forest500, fontSize: 13),
                       ),
                       const SizedBox(height: 6),
                       const Text('Pourcentages à afficher :', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
@@ -2188,7 +2322,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                           bool isSelected = fibPercentages.contains(p);
                           String label = p == 0.0 ? '0%' : p == 1.0 ? '100%' : '${(p * 100).toStringAsFixed(1)}%';
                           return FilterChip(
-                            label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : const Color(0xFF1B4332))),
+                            label: Text(label, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : AppColors.forest500)),
                             selected: isSelected,
                             selectedColor: Colors.orange.shade700,
                             backgroundColor: Colors.white,
@@ -2245,7 +2379,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
               actions: [
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1B4332),
+                    backgroundColor: AppColors.forest500,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: () => Navigator.pop(dialogContext),
@@ -2269,7 +2403,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFFF2EFE9),
+      backgroundColor: AppColors.background,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -2290,27 +2424,27 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w900,
-                      color: Color(0xFF1B4332),
+                      color: AppColors.forest500,
                     ),
                   ),
                   const SizedBox(height: 15),
-                  
+
                   SwitchListTile(
                     title: Text(
                       'Moyenne Mobile Exponentielle (EMA $emaPeriod)',
                       style: TextStyle(
-                        fontWeight: FontWeight.bold, 
-                        color: modalHasEnough ? const Color(0xFF1B4332) : Colors.grey,
+                        fontWeight: FontWeight.bold,
+                        color: modalHasEnough ? AppColors.forest500 : Colors.grey,
                       ),
                     ),
-                    subtitle: !modalHasEnough 
+                    subtitle: !modalHasEnough
                         ? Text(
-                            'Indisponible : nécessite au moins $emaPeriod bougies (actuellement ${currentData.length}).',
-                            style: const TextStyle(color: Colors.red, fontSize: 11),
-                          )
+                      'Indisponible : nécessite au moins $emaPeriod bougies (actuellement ${currentData.length}).',
+                      style: const TextStyle(color: Colors.red, fontSize: 11),
+                    )
                         : null,
                     value: modalHasEnough ? showEMA : false,
-                    activeThumbColor: const Color(0xFF1B4332),
+                    activeThumbColor: AppColors.forest500,
                     onChanged: modalHasEnough ? (bool value) {
                       setModalState(() => showEMA = value);
                       setState(() => showEMA = value);
@@ -2328,13 +2462,13 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                             'Période de l\'EMA :',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF1B4332),
+                              color: AppColors.forest500,
                               fontSize: 14,
                             ),
                           ),
                           DropdownButton<int>(
                             value: emaPeriod,
-                            dropdownColor: const Color(0xFFF2EFE9),
+                            dropdownColor: AppColors.background,
                             items: [9, 14, 20, 50, 100, 200].map((int val) {
                               return DropdownMenuItem<int>(
                                 value: val,
@@ -2342,7 +2476,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                                   '$val',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Color(0xFF1B4332),
+                                    color: AppColors.forest500,
                                   ),
                                 ),
                               );
@@ -2375,10 +2509,10 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                   SwitchListTile(
                     title: const Text(
                       'Retracements de Fibonacci',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1B4332)),
+                      style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.forest500),
                     ),
                     value: showFibonacci,
-                    activeThumbColor: const Color(0xFF1B4332),
+                    activeThumbColor: AppColors.forest500,
                     onChanged: (bool value) {
                       setModalState(() => showFibonacci = value);
                       setState(() {
@@ -2402,7 +2536,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
 
   TextAnchor _getHorizontalAlignment(double price, List<CandleData> data) {
     if (data.isEmpty) return TextAnchor.start;
-    
+
     List<int> crossingIndices = [];
     for (int i = 0; i < data.length; i++) {
       if (price >= data[i].low && price <= data[i].high) {
@@ -2438,7 +2572,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
       builder: (dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor: const Color(0xFFF2EFE9),
+          backgroundColor: AppColors.background,
           title: Row(
             children: const [
               Text('🔔', style: TextStyle(fontSize: 24)),
@@ -2446,7 +2580,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
               Text(
                 'Définir une alerte',
                 style: TextStyle(
-                  color: Color(0xFF1B4332),
+                  color: AppColors.forest500,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
@@ -2460,7 +2594,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
               Text(
                 'Entrez le seuil de prix pour ${widget.commodityName} :',
                 style: TextStyle(
-                  color: const Color(0xFF1B4332).withValues(alpha: 0.8),
+                  color: AppColors.forest500.withValues(alpha: 0.8),
                   fontSize: 14,
                 ),
               ),
@@ -2473,21 +2607,21 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                 ],
                 decoration: InputDecoration(
                   labelText: 'Seuil cible (\$)',
-                  labelStyle: const TextStyle(color: Color(0xFF1B4332)),
+                  labelStyle: const TextStyle(color: AppColors.forest500),
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
-                    borderSide: BorderSide(color: const Color(0xFF1B4332).withValues(alpha: 0.2)),
+                    borderSide: BorderSide(color: AppColors.forest500.withValues(alpha: 0.2)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(15),
-                    borderSide: const BorderSide(color: Color(0xFF1B4332), width: 2),
+                    borderSide: const BorderSide(color: AppColors.forest500, width: 2),
                   ),
                 ),
                 style: const TextStyle(
                   fontWeight: FontWeight.w900,
-                  color: Color(0xFF1B4332),
+                  color: AppColors.forest500,
                   fontSize: 16,
                 ),
               ),
@@ -2498,12 +2632,12 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
               onPressed: () => Navigator.pop(dialogContext),
               child: Text(
                 'Annuler',
-                style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.6)),
+                style: TextStyle(color: AppColors.forest500.withValues(alpha: 0.6)),
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1B4332),
+                backgroundColor: AppColors.forest500,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () {
@@ -2519,11 +2653,11 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                       builder: (confirmContext) {
                         return AlertDialog(
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          backgroundColor: const Color(0xFFF2EFE9),
+                          backgroundColor: AppColors.background,
                           title: const Text(
                             'Alerte existante',
                             style: TextStyle(
-                              color: Color(0xFF1B4332),
+                              color: AppColors.forest500,
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
                             ),
@@ -2531,7 +2665,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                           content: Text(
                             'Une alerte existe déjà au prix de ${parsedPrice.toStringAsFixed(2)} \$. Êtes-vous sûr de vouloir en placer une autre au même prix ?',
                             style: TextStyle(
-                              color: const Color(0xFF1B4332).withValues(alpha: 0.8),
+                              color: AppColors.forest500.withValues(alpha: 0.8),
                               fontSize: 14,
                             ),
                           ),
@@ -2540,12 +2674,12 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                               onPressed: () => Navigator.pop(confirmContext),
                               child: Text(
                                 'Annuler',
-                                style: TextStyle(color: const Color(0xFF1B4332).withValues(alpha: 0.6)),
+                                style: TextStyle(color: AppColors.forest500.withValues(alpha: 0.6)),
                               ),
                             ),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1B4332),
+                                backgroundColor: AppColors.forest500,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                               ),
                               onPressed: () {
@@ -2554,7 +2688,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                                 ScaffoldMessenger.of(mainContext).showSnackBar(
                                   SnackBar(
                                     content: Text('Alerte ajoutée : ${widget.commodityName} > ${parsedPrice.toStringAsFixed(2)} \$'),
-                                    backgroundColor: const Color(0xFF1B4332),
+                                    backgroundColor: AppColors.forest500,
                                     behavior: SnackBarBehavior.floating,
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                   ),
@@ -2571,7 +2705,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                     ScaffoldMessenger.of(mainContext).showSnackBar(
                       SnackBar(
                         content: Text('Alerte ajoutée : ${widget.commodityName} > ${parsedPrice.toStringAsFixed(2)} \$'),
-                        backgroundColor: const Color(0xFF1B4332),
+                        backgroundColor: AppColors.forest500,
                         behavior: SnackBarBehavior.floating,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
@@ -2587,16 +2721,21 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
     );
   }
 
-  Widget _buildCompactPeriodButton(String period) {
+  Widget _buildCompactPeriodButton(String period, UserDataProvider provider) {
     bool isSelected = selectedPeriod == period;
+    bool isLocked = !provider.canUsePeriod(period);
     return GestureDetector(
       onTap: () {
+        if (isLocked) {
+          _showUpgradeSnackbar("período $period");
+          return;
+        }
         HapticFeedback.selectionClick();
         setState(() {
           selectedPeriod = period;
           selectedCandle = null;
-          _manualYMin = null; 
-          _manualYMax = null; 
+          _manualYMin = null;
+          _manualYMax = null;
           fibStartCandle = null;
           fibEndCandle = null;
 
@@ -2609,32 +2748,48 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF1B4332) : Colors.transparent,
+          color: isSelected ? AppColors.forest500 : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Text(
-          period,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: isSelected ? Colors.white : const Color(0xFF1B4332),
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              period,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isSelected
+                    ? Colors.white
+                    : (isLocked ? AppColors.forest500.withValues(alpha: 0.3) : AppColors.forest500),
+              ),
+            ),
+            if (isLocked) ...[
+              const SizedBox(width: 2),
+              Icon(Icons.lock_outline_rounded, size: 9, color: AppColors.forest500.withValues(alpha: 0.3)),
+            ],
+          ],
         ),
       ),
     );
   }
 
-  Widget _compactToggleOption(String label, bool isCandleOption) {
+  Widget _compactToggleOption(String label, bool isCandleOption, UserDataProvider provider) {
     bool isSelected = isCandleView == isCandleOption;
+    bool isLocked = isCandleOption && !provider.canUseCandleView;
     return GestureDetector(
       onTap: () {
+        if (isLocked) {
+          _showUpgradeSnackbar("vista de velas (candlestick)");
+          return;
+        }
         HapticFeedback.selectionClick();
         setState(() => isCandleView = isCandleOption);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF1B4332) : Colors.transparent,
+          color: isSelected ? AppColors.forest500 : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
@@ -2642,7 +2797,9 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.bold,
-            color: isSelected ? Colors.white : const Color(0xFF1B4332),
+            color: isSelected
+                ? Colors.white
+                : (isLocked ? AppColors.forest500.withValues(alpha: 0.3) : AppColors.forest500),
           ),
         ),
       ),
@@ -2675,7 +2832,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
     final double midPrice = (chartMin + chartMax) / 2;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2EFE9),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -2689,14 +2846,14 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                       IconButton(
                         constraints: const BoxConstraints(),
                         padding: EdgeInsets.zero,
-                        icon: const Icon(Icons.close_fullscreen_rounded, color: Color(0xFF1B4332), size: 22),
+                        icon: const Icon(Icons.close_fullscreen_rounded, color: AppColors.forest500, size: 22),
                         onPressed: () => Navigator.pop(context),
                       ),
                       const SizedBox(width: 12),
                       Text(
                         widget.commodityName,
                         style: const TextStyle(
-                          color: Color(0xFF1B4332),
+                          color: AppColors.forest500,
                           fontWeight: FontWeight.w900,
                           fontSize: 16,
                         ),
@@ -2709,7 +2866,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(
-                          children: periods.map((p) => _buildCompactPeriodButton(p)).toList(),
+                          children: periods.map((p) => _buildCompactPeriodButton(p, provider)).toList(),
                         ),
                       ),
                     ],
@@ -2725,8 +2882,8 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                         ),
                         child: Row(
                           children: [
-                            _compactToggleOption("Bougies", true),
-                            _compactToggleOption("Courbe", false),
+                            _compactToggleOption("Bougies", true, provider),
+                            _compactToggleOption("Courbe", false, provider),
                           ],
                         ),
                       ),
@@ -2734,10 +2891,14 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                       IconButton(
                         constraints: const BoxConstraints(),
                         padding: const EdgeInsets.all(6),
-                        icon: const Icon(Icons.insights_rounded, color: Color(0xFF1B4332), size: 20),
-                        tooltip: "Indicateurs techniques",
+                        icon: const Icon(Icons.insights_rounded, color: AppColors.forest500, size: 20),
+                        tooltip: "Indicadores técnicos",
                         onPressed: () {
                           HapticFeedback.lightImpact();
+                          if (!provider.canUseIndicators) {
+                            _showUpgradeSnackbar("indicadores técnicos (EMA / Fibonacci)");
+                            return;
+                          }
                           _showIndicatorsBottomSheet(context);
                         },
                       ),
@@ -2760,7 +2921,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                             padding: const EdgeInsets.all(6),
                             icon: Icon(
                               isFavorite ? Icons.star_rounded : Icons.star_outline_rounded,
-                              color: isFavorite ? Colors.amber : const Color(0xFF1B4332),
+                              color: isFavorite ? Colors.amber : AppColors.forest500,
                               size: 22,
                             ),
                             onPressed: () {
@@ -2892,11 +3053,11 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                                         fontSize: 11,
                                       ),
                                       horizontalTextAlignment:
-                                          _getHorizontalAlignment(price, rawData),
+                                      _getHorizontalAlignment(price, rawData),
                                       verticalTextAlignment:
-                                          price >= midPrice
-                                              ? TextAnchor.end
-                                              : TextAnchor.start,
+                                      price >= midPrice
+                                          ? TextAnchor.end
+                                          : TextAnchor.start,
                                     );
                                   }),
                                   ..._getFibonacciPlotBands(rawData),
@@ -2904,66 +3065,66 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                               ),
                               indicators: showEMA && rawData.length >= emaPeriod
                                   ? <TechnicalIndicator<CandleData, DateTime>>[
-                                      EmaIndicator<CandleData, DateTime>(
-                                        dataSource: rawData,
-                                        xValueMapper: (CandleData data, _) => data.date,
-                                        closeValueMapper: (CandleData data, _) => data.close,
-                                        period: emaPeriod,
-                                        isVisible: true,
-                                        animationDuration: 0,
-                                        name: 'EMA',
-                                        signalLineColor: emaColor,
-                                        signalLineWidth: 2,
-                                      ),
-                                    ]
+                                EmaIndicator<CandleData, DateTime>(
+                                  dataSource: rawData,
+                                  xValueMapper: (CandleData data, _) => data.date,
+                                  closeValueMapper: (CandleData data, _) => data.close,
+                                  period: emaPeriod,
+                                  isVisible: true,
+                                  animationDuration: 0,
+                                  name: 'EMA',
+                                  signalLineColor: emaColor,
+                                  signalLineWidth: 2,
+                                ),
+                              ]
                                   : [],
                               series: isCandleView
                                   ? <CartesianSeries<CandleData, DateTime>>[
-                                      CandleSeries<CandleData, DateTime>(
-                                        dataSource: rawData,
-                                        bearColor: const Color(0xFFE53935),
-                                        bullColor: const Color(0xFF43A047),
-                                        enableSolidCandles: true,
-                                        xValueMapper: (data, _) => data.date,
-                                        lowValueMapper: (data, _) => data.low,
-                                        highValueMapper: (data, _) => data.high,
-                                        openValueMapper: (data, _) => data.open,
-                                        closeValueMapper: (data, _) => data.close,
-                                        onPointTap: (ChartPointDetails details) {
-                                          if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
-                                            setState(() {
-                                              selectedCandle = rawData[details.pointIndex!];
-                                            });
-                                            HapticFeedback.selectionClick();
-                                          }
-                                        },
-                                      ),
-                                    ]
+                                CandleSeries<CandleData, DateTime>(
+                                  dataSource: rawData,
+                                  bearColor: const Color(0xFFE53935),
+                                  bullColor: const Color(0xFF43A047),
+                                  enableSolidCandles: true,
+                                  xValueMapper: (data, _) => data.date,
+                                  lowValueMapper: (data, _) => data.low,
+                                  highValueMapper: (data, _) => data.high,
+                                  openValueMapper: (data, _) => data.open,
+                                  closeValueMapper: (data, _) => data.close,
+                                  onPointTap: (ChartPointDetails details) {
+                                    if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
+                                      setState(() {
+                                        selectedCandle = rawData[details.pointIndex!];
+                                      });
+                                      HapticFeedback.selectionClick();
+                                    }
+                                  },
+                                ),
+                              ]
                                   : <CartesianSeries<CandleData, DateTime>>[
-                                      FastLineSeries<CandleData, DateTime>(
-                                        dataSource: rawData,
-                                        xValueMapper: (data, _) => data.date,
-                                        yValueMapper: (data, _) => data.close,
-                                        color: const Color(0xFF1B4332),
-                                        width: 2,
-                                        markerSettings: MarkerSettings(
-                                          isVisible: selectedPeriod == "1D" || selectedPeriod == "1W",
-                                          height: 5,
-                                          width: 5,
-                                          color: const Color(0xFF1B4332),
-                                          borderColor: Colors.white,
-                                         borderWidth: 1,
-                                        ),
-                                        onPointTap: (ChartPointDetails details) {
-                                          if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
-                                            setState(() {
-                                              selectedCandle = rawData[details.pointIndex!];
-                                            });
-                                            HapticFeedback.selectionClick();
-                                          }
-                                        },
-                                      ),
-                                    ],
+                                FastLineSeries<CandleData, DateTime>(
+                                  dataSource: rawData,
+                                  xValueMapper: (data, _) => data.date,
+                                  yValueMapper: (data, _) => data.close,
+                                  color: AppColors.forest500,
+                                  width: 2,
+                                  markerSettings: MarkerSettings(
+                                    isVisible: selectedPeriod == "1D" || selectedPeriod == "1W",
+                                    height: 5,
+                                    width: 5,
+                                    color: AppColors.forest500,
+                                    borderColor: Colors.white,
+                                    borderWidth: 1,
+                                  ),
+                                  onPointTap: (ChartPointDetails details) {
+                                    if (!showFibonacci && details.pointIndex != null && details.pointIndex! >= 0 && details.pointIndex! < rawData.length) {
+                                      setState(() {
+                                        selectedCandle = rawData[details.pointIndex!];
+                                      });
+                                      HapticFeedback.selectionClick();
+                                    }
+                                  },
+                                ),
+                              ],
                             ),
                             Positioned(
                               left: 0,
@@ -3010,7 +3171,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                   children: [
                     Text(
                       DateFormat('dd/MM/yyyy HH:mm').format(selectedCandle!.date),
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF1B4332)),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.forest500),
                     ),
                     Text('O: ${selectedCandle!.open.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
                     Text('H: ${selectedCandle!.high.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
@@ -3018,7 +3179,7 @@ class _FullScreenChartPageState extends State<FullScreenChartPage> {
                     Text('C: ${selectedCandle!.close.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
                     InkWell(
                       onTap: () => setState(() => selectedCandle = null),
-                      child: const Icon(Icons.close, size: 14, color: Color(0xFF1B4332)),
+                      child: const Icon(Icons.close, size: 14, color: AppColors.forest500),
                     ),
                   ],
                 ),

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-// Remplace 'proprice' par le nom de ton projet défini dans ton pubspec.yaml
 import 'package:proprice/providers/app_settings.dart';
-import 'package:provider/provider.dart'; 
+import 'package:provider/provider.dart';
+
+import '../../theme/app_colors.dart';
 
 class CurrencyPage extends StatefulWidget {
   const CurrencyPage({super.key});
@@ -11,23 +12,21 @@ class CurrencyPage extends StatefulWidget {
 }
 
 class _CurrencyPageState extends State<CurrencyPage> {
-  String _selectedCurrency = 'USD'; 
+  String _selectedCurrency = 'USD';
   final List<String> _currencies = ['USD', 'EUR', 'MXN', 'GBP'];
 
   @override
   Widget build(BuildContext context) {
-    const Color forestGreen = Color(0xFF1B4332);
-    
     // On récupère l'instance des réglages pour lire les valeurs
     final appSettings = context.watch<AppSettings>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF2EFE9),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: forestGreen,
-        title: const Text("Valores y Divisa", style: TextStyle(color: Colors.white)),
+        // Avant : backgroundColor: forestGreen (bandeau vert plein).
+        title: const Text("Valores y Divisa", style: TextStyle(color: AppColors.forest700)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.forest700, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -41,6 +40,7 @@ class _CurrencyPageState extends State<CurrencyPage> {
             const SizedBox(height: 10),
             Card(
               elevation: 0,
+              color: AppColors.surface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Column(
                 children: _currencies.map((currency) {
@@ -48,7 +48,7 @@ class _CurrencyPageState extends State<CurrencyPage> {
                     title: Text(currency, style: const TextStyle(fontWeight: FontWeight.w600)),
                     value: currency,
                     groupValue: _selectedCurrency,
-                    activeColor: forestGreen,
+                    activeColor: AppColors.forest500,
                     onChanged: (value) => setState(() => _selectedCurrency = value!),
                   );
                 }).toList(),
@@ -62,15 +62,16 @@ class _CurrencyPageState extends State<CurrencyPage> {
             const SizedBox(height: 10),
             Card(
               elevation: 0,
+              color: AppColors.surface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Column(
                 children: [
                   SwitchListTile(
                     title: const Text("Ocultar saldo", style: TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: const Text("Ocultar cifras en la pantalla principal"),
-                    value: appSettings.hideBalance, 
-                    activeColor: forestGreen,
-                    activeTrackColor: forestGreen.withValues(alpha: 0.3),
+                    value: appSettings.hideBalance,
+                    activeColor: AppColors.forest500,
+                    activeTrackColor: AppColors.forest500.withValues(alpha: 0.3),
                     onChanged: (val) => context.read<AppSettings>().toggleHideBalance(val),
                   ),
                   const Divider(height: 1),
@@ -78,8 +79,8 @@ class _CurrencyPageState extends State<CurrencyPage> {
                     title: const Text("Gráficos detallados", style: TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: const Text("Ver fluctuaciones del mercado"),
                     value: appSettings.showDetailedCharts,
-                    activeColor: forestGreen,
-                    activeTrackColor: forestGreen.withValues(alpha: 0.3),
+                    activeColor: AppColors.forest500,
+                    activeTrackColor: AppColors.forest500.withValues(alpha: 0.3),
                     onChanged: (val) => context.read<AppSettings>().toggleShowDetailedCharts(val),
                   ),
                 ],
@@ -94,12 +95,12 @@ class _CurrencyPageState extends State<CurrencyPage> {
   Widget _buildSectionHeader(IconData icon, String title) {
     return Row(
       children: [
-        Icon(icon, color: const Color(0xFF1B4332), size: 20),
+        Icon(icon, color: AppColors.forest500, size: 20),
         const SizedBox(width: 8),
         Text(
           title.toUpperCase(),
           style: const TextStyle(
-            color: Color(0xFF1B4332),
+            color: AppColors.forest500,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.2,
           ),
